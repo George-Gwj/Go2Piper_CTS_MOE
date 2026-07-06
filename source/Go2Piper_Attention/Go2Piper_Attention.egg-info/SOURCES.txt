@@ -1,0 +1,10 @@
+pyproject.toml
+setup.py
+Go2Piper_Attention/__init__.py
+Go2Piper_Attention/ui_extension_example.py
+Go2Piper_Attention.egg-info/PKG-INFO
+Go2Piper_Attention.egg-info/SOURCES.txt
+Go2Piper_Attention.egg-info/dependency_links.txt
+Go2Piper_Attention.egg-info/not-zip-safe
+Go2Piper_Attention.egg-info/requires.txt
+Go2Piper_Attention.egg-info/top_level.txt
