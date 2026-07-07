@@ -38,7 +38,10 @@ def add_rsl_rl_args(parser: argparse.ArgumentParser):
         "--log_project_name", type=str, default=None, help="Name of the logging project when using wandb or neptune."
     )
     arg_group.add_argument(
-        "--options", type=str, default=None, help="input:0/1/2 leg/arm/all."
+        "--options",
+        type=str,
+        default=None,
+        help="CTS-MoE training mode override: teacher or mix/mixed. Legacy play modes: leg/arm/all.",
     )
 
 

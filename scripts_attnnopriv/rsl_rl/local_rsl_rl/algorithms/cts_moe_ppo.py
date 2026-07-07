@@ -12,9 +12,12 @@ from local_rsl_rl.utils import PerTaskPopArt
 class CTSMoEPPO:
     """PPO for StructureAwareCTSMoEPolicy.
 
-    PPO gradients update teacher_encoder, moe_actor, multi_critic, and log_std.
-    The student encoder is updated only through latent distillation.
+    training_mode controls rollout/update behavior:
+    - teacher: teacher encoder + MoE actor + critic only (no student CNN/GRU forward).
+    - mixed: teacher PPO plus student latent distillation on a rollout subset.
     """
+
+    VALID_TRAINING_MODES = ("teacher", "mixed", "student_distill")
 
     def __init__(
         self,
@@ -34,6 +37,7 @@ class CTSMoEPPO:
         desired_kl: float | None = 0.01,
         device: str = "cpu",
         eps: float = 1e-5,
+        training_mode: str = "mixed",
         distillation_loss_coef: float = 1.0,
         student_rollout_ratio: float = 0.15,
         router_entropy_coef: float = 0.0,
@@ -73,6 +77,9 @@ class CTSMoEPPO:
         self.use_clipped_value_loss = use_clipped_value_loss
         self.schedule = schedule
         self.desired_kl = desired_kl
+        if training_mode not in self.VALID_TRAINING_MODES:
+            raise ValueError(f"training_mode must be one of {self.VALID_TRAINING_MODES}, got {training_mode!r}")
+        self.training_mode = training_mode
         self.distillation_loss_coef = distillation_loss_coef
         if student_rollout_ratio < 0.0 or student_rollout_ratio > 1.0:
             raise ValueError("student_rollout_ratio must be in [0, 1]")
@@ -134,19 +141,18 @@ class CTSMoEPPO:
         student_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         student_mask = self._resolve_student_mask(proprio.shape[0], proprio.device, student_mask)
+        forward_kwargs = self._build_forward_kwargs(
+            proprio=proprio,
+            task_id=task_id,
+            height_scan=height_scan,
+            privileged_obs=privileged_obs,
+            proprio_history=proprio_history,
+            perception=perception,
+            student_mask=student_mask,
+            return_value=True,
+        )
         with torch.no_grad():
-            out = self.policy(
-                mode="mixed",
-                proprio=proprio,
-                task_id=task_id,
-                height_scan=height_scan,
-                privileged_obs=privileged_obs,
-                proprio_history=proprio_history,
-                perception=perception,
-                student_mask=student_mask,
-                detach_student_in_mixed=True,
-                return_value=True,
-            )
+            out = self.policy(**forward_kwargs)
             actions = out["distribution"].sample()
             actions_log_prob = out["distribution"].log_prob(actions).sum(dim=-1)
             value = out["value"]
@@ -190,19 +196,18 @@ class CTSMoEPPO:
         student_mask: torch.Tensor | None = None,
     ):
         student_mask = self._resolve_student_mask(proprio.shape[0], proprio.device, student_mask)
+        forward_kwargs = self._build_forward_kwargs(
+            proprio=proprio,
+            task_id=task_id,
+            height_scan=height_scan,
+            privileged_obs=privileged_obs,
+            proprio_history=proprio_history,
+            perception=perception,
+            student_mask=student_mask,
+            return_value=True,
+        )
         with torch.no_grad():
-            out = self.policy(
-                mode="mixed",
-                proprio=proprio,
-                task_id=task_id,
-                height_scan=height_scan,
-                privileged_obs=privileged_obs,
-                proprio_history=proprio_history,
-                perception=perception,
-                student_mask=student_mask,
-                detach_student_in_mixed=True,
-                return_value=True,
-            )
+            out = self.policy(**forward_kwargs)
             value = out["value"]
             last_values = self.popart.denormalize(task_id, value) if self.use_popart else value
             last_values = last_values.detach()
@@ -231,7 +236,7 @@ class CTSMoEPPO:
             if self.popart_use_output_rescale:
                 self._apply_popart_rescale_to_critic_heads(old_stats, new_stats)
 
-        # Phase 1: PPO update. Student latent is detached in mixed mode, so PPO
+        # Phase 1: PPO update. In mixed mode the student latent is detached, so PPO
         # gradients update only teacher_encoder, moe_actor, multi_critic, log_std.
         generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
         for (
@@ -250,8 +255,7 @@ class CTSMoEPPO:
             old_mu_batch,
             old_sigma_batch,
         ) in generator:
-            out = self.policy(
-                mode="mixed",
+            forward_kwargs = self._build_forward_kwargs(
                 proprio=proprio_batch,
                 task_id=task_id_batch,
                 height_scan=height_scan_batch,
@@ -259,9 +263,9 @@ class CTSMoEPPO:
                 proprio_history=proprio_history_batch,
                 perception=perception_batch,
                 student_mask=student_mask_batch,
-                detach_student_in_mixed=True,
                 return_value=True,
             )
+            out = self.policy(**forward_kwargs)
             dist = out["distribution"]
             actions_log_prob_batch = dist.log_prob(actions_batch).sum(dim=-1)
             entropy_batch = dist.entropy().sum(dim=-1)
@@ -310,50 +314,50 @@ class CTSMoEPPO:
 
         num_updates = self.num_learning_epochs * self.num_mini_batches
 
-        # Phase 2: student distillation after PPO update. Only trajectories that
-        # actually used student latent during rollout/update are used here.
+        # Phase 2: student distillation after PPO update (mixed mode only).
         mean_distillation_loss = 0.0
         num_distill_updates = 0
-        distill_generator = self.storage.mini_batch_generator(self.num_mini_batches, 1)
-        for (
-            _proprio_batch,
-            height_scan_batch,
-            privileged_obs_batch,
-            proprio_history_batch,
-            perception_batch,
-            _task_id_batch,
-            student_mask_batch,
-            _actions_batch,
-            _target_values_batch,
-            _advantages_batch,
-            _returns_batch,
-            _old_actions_log_prob_batch,
-            _old_mu_batch,
-            _old_sigma_batch,
-        ) in distill_generator:
-            if not student_mask_batch.any():
-                continue
+        if self.training_mode == "mixed":
+            distill_generator = self.storage.mini_batch_generator(self.num_mini_batches, 1)
+            for (
+                _proprio_batch,
+                height_scan_batch,
+                privileged_obs_batch,
+                proprio_history_batch,
+                perception_batch,
+                _task_id_batch,
+                student_mask_batch,
+                _actions_batch,
+                _target_values_batch,
+                _advantages_batch,
+                _returns_batch,
+                _old_actions_log_prob_batch,
+                _old_mu_batch,
+                _old_sigma_batch,
+            ) in distill_generator:
+                if not student_mask_batch.any():
+                    continue
 
-            mask = student_mask_batch
-            with torch.no_grad():
-                z_teacher = self.policy.encode_teacher(
-                    height_scan_batch[mask],
-                    privileged_obs_batch[mask],
+                mask = student_mask_batch
+                with torch.no_grad():
+                    z_teacher = self.policy.encode_teacher(
+                        height_scan_batch[mask],
+                        privileged_obs_batch[mask],
+                    )
+                z_student = self.policy.encode_student(
+                    proprio_history_batch[mask],
+                    perception_batch[mask],
                 )
-            z_student = self.policy.encode_student(
-                proprio_history_batch[mask],
-                perception_batch[mask],
-            )
-            distillation_loss = self.policy.distillation_loss(z_student, z_teacher)
-            student_loss = self.distillation_loss_coef * distillation_loss
+                distillation_loss = self.policy.distillation_loss(z_student, z_teacher)
+                student_loss = self.distillation_loss_coef * distillation_loss
 
-            self.student_optimizer.zero_grad()
-            student_loss.backward()
-            nn.utils.clip_grad_norm_(list(self.policy.student_parameters()), self.max_grad_norm)
-            self.student_optimizer.step()
+                self.student_optimizer.zero_grad()
+                student_loss.backward()
+                nn.utils.clip_grad_norm_(list(self.policy.student_parameters()), self.max_grad_norm)
+                self.student_optimizer.step()
 
-            mean_distillation_loss += distillation_loss.item()
-            num_distill_updates += 1
+                mean_distillation_loss += distillation_loss.item()
+                num_distill_updates += 1
 
         loss_dict = {
             "value_function": mean_value_loss / num_updates,
@@ -387,6 +391,9 @@ class CTSMoEPPO:
         device: torch.device | str,
         student_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if self.training_mode == "teacher":
+            return torch.zeros(num_envs, dtype=torch.bool, device=device)
+
         if student_mask is not None:
             if student_mask.dim() != 1 or student_mask.shape[0] != num_envs:
                 raise ValueError(f"student_mask must be [B] with B={num_envs}, got {tuple(student_mask.shape)}")
@@ -402,6 +409,42 @@ class CTSMoEPPO:
         student_indices = torch.randperm(num_envs, device=device)[:num_student_envs]
         mask[student_indices] = True
         return mask
+
+    def _build_forward_kwargs(
+        self,
+        *,
+        proprio: torch.Tensor,
+        task_id: torch.Tensor,
+        height_scan: torch.Tensor,
+        privileged_obs: torch.Tensor,
+        proprio_history: torch.Tensor,
+        perception: torch.Tensor,
+        student_mask: torch.Tensor,
+        return_value: bool,
+    ) -> dict:
+        if self.training_mode == "teacher":
+            return {
+                "mode": "teacher",
+                "proprio": proprio,
+                "task_id": task_id,
+                "height_scan": height_scan,
+                "privileged_obs": privileged_obs,
+                "return_value": return_value,
+            }
+        if self.training_mode == "mixed":
+            return {
+                "mode": "mixed",
+                "proprio": proprio,
+                "task_id": task_id,
+                "height_scan": height_scan,
+                "privileged_obs": privileged_obs,
+                "proprio_history": proprio_history,
+                "perception": perception,
+                "student_mask": student_mask,
+                "detach_student_in_mixed": True,
+                "return_value": return_value,
+            }
+        raise NotImplementedError(f"forward path for training_mode={self.training_mode!r} is not implemented yet")
 
     def _compute_value_loss(
         self,

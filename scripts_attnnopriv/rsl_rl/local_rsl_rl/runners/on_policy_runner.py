@@ -32,12 +32,14 @@ class OnPolicyRunner:
         if alg_class_name != "CTSMoEPPO":
             raise ValueError(f"Unsupported CTS-MoE algorithm class: {alg_class_name}")
         self.alg_cfg = self._filter_constructor_cfg(CTSMoEPPO, self.alg_cfg)
+        self.alg_cfg = self._apply_training_mode_override(self.alg_cfg)
 
         obs = self._move_obs_to_device(self.env.get_cts_moe_observations())
         self._sync_policy_dims_from_obs(obs)
 
         self.policy = StructureAwareCTSMoEPolicy(**self.policy_cfg).to(self.device)
         self.alg = CTSMoEPPO(self.policy, device=self.device, **self.alg_cfg)
+        self.training_mode = self.alg.training_mode
 
         self.num_steps_per_env = self.cfg["num_steps_per_env"]
         self.save_interval = self.cfg["save_interval"]
@@ -70,6 +72,12 @@ class OnPolicyRunner:
         signature = inspect.signature(cls.__init__)
         valid_keys = set(signature.parameters) - {"self", "policy", "device"}
         return {key: value for key, value in cfg.items() if key in valid_keys}
+
+    def _apply_training_mode_override(self, alg_cfg: dict) -> dict:
+        options = self.cfg.get("options")
+        if options in ("teacher", "mix", "mixed"):
+            alg_cfg["training_mode"] = "teacher" if options == "teacher" else "mixed"
+        return alg_cfg
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False):
         self._init_writer()
@@ -168,12 +176,12 @@ class OnPolicyRunner:
 
             self.writer = SummaryWriter(log_dir=self.log_dir, flush_secs=10)
         elif self.logger_type == "wandb":
-            from rsl_rl.utils.wandb_utils import WandbSummaryWriter
+            from local_rsl_rl.utils.wandb_utils import WandbSummaryWriter
 
             self.writer = WandbSummaryWriter(log_dir=self.log_dir, flush_secs=10, cfg=self.cfg)
             self.writer.log_config(self.env.cfg, self.cfg, self.alg_cfg, self.policy_cfg)
         elif self.logger_type == "neptune":
-            from rsl_rl.utils.neptune_utils import NeptuneSummaryWriter
+            from local_rsl_rl.utils.neptune_utils import NeptuneSummaryWriter
 
             self.writer = NeptuneSummaryWriter(log_dir=self.log_dir, flush_secs=10, cfg=self.cfg)
             self.writer.log_config(self.env.cfg, self.cfg, self.alg_cfg, self.policy_cfg)
@@ -214,7 +222,7 @@ class OnPolicyRunner:
             self.writer.add_scalar("Train/mean_reward", statistics.mean(rewbuffer), it)
             self.writer.add_scalar("Train/mean_episode_length", statistics.mean(lenbuffer), it)
 
-        title = f" \033[1m CTS-MoE learning iteration {it}/{tot_iter} \033[0m "
+        title = f" \033[1m CTS-MoE ({self.training_mode}) learning iteration {it}/{tot_iter} \033[0m "
         log_string = (
             f"{'#' * width}\n"
             f"{title.center(width, ' ')}\n\n"
