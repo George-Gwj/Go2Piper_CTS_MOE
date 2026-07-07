@@ -293,7 +293,7 @@ class MoEActor(nn.Module):
         "lateral_avoidance",
         "under_table",
         "stair_up",
-        "stair_down",
+        "flat",
     )
 
     def __init__(
@@ -369,7 +369,7 @@ class SparseMultiCritic(nn.Module):
         "box_avoidance",
         "under_table",
         "stair_up",
-        "stair_down",
+        "flat",
     )
 
     def __init__(

@@ -45,7 +45,7 @@ class Go2PiperCTSMoEPolicyCfg:
     num_experts: int = 4
     expert_hidden_dims: list[int] = [256, 128]
     router_hidden_dims: list[int] = [128, 64]
-    expert_names: list[str] = ["lateral_avoidance", "under_table", "stair_up", "stair_down"]
+    expert_names: list[str] = ["lateral_avoidance", "under_table", "stair_up", "flat"]
 
     # Sparse multi-critic.
     critic_hidden_dims: list[int] = [256, 128]

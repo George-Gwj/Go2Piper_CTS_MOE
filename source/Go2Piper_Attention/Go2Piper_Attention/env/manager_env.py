@@ -12,13 +12,13 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     TASK_BOX_AVOIDANCE = 0
     TASK_UNDER_TABLE = 1
     TASK_STAIR_UP = 2
-    TASK_STAIR_DOWN = 3
+    TASK_FLAT = 3
     NUM_TASKS = 4
     TASK_NAMES = (
         "box_avoidance",
         "under_table",
         "stair_up",
-        "stair_down",
+        "flat",
     )
 
     def __init__(self, cfg, render_mode, **kwargs):
@@ -205,24 +205,128 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         self.mask_box = self.task_id == self.TASK_BOX_AVOIDANCE
         self.mask_under_table = self.task_id == self.TASK_UNDER_TABLE
         self.mask_stair_up = self.task_id == self.TASK_STAIR_UP
-        self.mask_stair_down = self.task_id == self.TASK_STAIR_DOWN
+        self.mask_flat = self.task_id == self.TASK_FLAT
 
     def _setup_task_scenes(self):
         self._refresh_task_masks()
-        # TODO: create or activate task-specific scene elements per fixed env mask.
-        # mask_box: box obstacle environments
-        # mask_under_table: table environments
-        # mask_stair_up: stair-up terrain environments
-        # mask_stair_down: stair-down terrain environments
+        all_env_ids = torch.arange(self.num_envs, dtype=torch.long, device=self.device)
+        self._reset_task_scene(all_env_ids)
 
     def _reset_task_scene(self, env_ids: torch.Tensor):
         task_ids = self.task_id[env_ids]
         box_env_ids = env_ids[task_ids == self.TASK_BOX_AVOIDANCE]
         table_env_ids = env_ids[task_ids == self.TASK_UNDER_TABLE]
         stair_up_env_ids = env_ids[task_ids == self.TASK_STAIR_UP]
-        stair_down_env_ids = env_ids[task_ids == self.TASK_STAIR_DOWN]
-        _ = (box_env_ids, table_env_ids, stair_up_env_ids, stair_down_env_ids)
-        # TODO: reset task-specific scene elements without changing task type.
+        flat_env_ids = env_ids[task_ids == self.TASK_FLAT]
+        self._hide_task_scene_prims(env_ids)
+        self._randomize_box_scene(box_env_ids)
+        self._randomize_under_table_scene(table_env_ids)
+        self._randomize_stair_up_scene(stair_up_env_ids)
+        # Flat envs deliberately keep all task-scene objects hidden.
+        _ = flat_env_ids
+
+    def _task_scene_prim_path(self, env_id: int, name: str) -> str:
+        return f"/World/envs/env_{env_id}/{name}"
+
+    def _hide_task_scene_prims(self, env_ids: torch.Tensor):
+        names = [
+            "box_obstacle",
+            "table_top",
+            "table_leg_0",
+            "table_leg_1",
+            "table_leg_2",
+            "table_leg_3",
+            "stair_step_0",
+            "stair_step_1",
+            "stair_step_2",
+            "stair_step_3",
+            "stair_step_4",
+            "stair_step_5",
+            "stair_step_6",
+            "stair_platform",
+        ]
+        for env_id in env_ids.tolist():
+            for name in names:
+                self._set_box_transform(self._task_scene_prim_path(int(env_id), name), (0.0, 0.0, -10.0), (1.0, 1.0, 1.0))
+
+    def _randomize_box_scene(self, env_ids: torch.Tensor):
+        for env_id in env_ids.tolist():
+            size_z = 0.65
+            pos_x = self._uniform(1.35, 1.65)
+            pos_y = self._uniform(-0.35, 0.35)
+            self._set_box_transform(
+                self._task_scene_prim_path(int(env_id), "box_obstacle"),
+                (pos_x, pos_y, size_z / 2.0),
+                (1.0, 1.0, 1.0),
+            )
+
+    def _randomize_under_table_scene(self, env_ids: torch.Tensor):
+        for env_id in env_ids.tolist():
+            table_width = 0.95
+            table_height = 0.55
+            table_length = 1.2
+            table_x = self._uniform(1.85, 2.15)
+            table_y = self._uniform(-0.10, 0.10)
+            self._set_box_transform(
+                self._task_scene_prim_path(int(env_id), "table_top"),
+                (table_x, table_y, table_height),
+                (1.0, 1.0, 1.0),
+            )
+            x_offsets = (-table_length / 2.0 + 0.08, table_length / 2.0 - 0.08)
+            y_offsets = (-table_width / 2.0 + 0.08, table_width / 2.0 - 0.08)
+            leg_idx = 0
+            for x_offset in x_offsets:
+                for y_offset in y_offsets:
+                    self._set_box_transform(
+                        self._task_scene_prim_path(int(env_id), f"table_leg_{leg_idx}"),
+                        (table_x + x_offset, table_y + y_offset, table_height / 2.0),
+                        (1.0, 1.0, 1.0),
+                    )
+                    leg_idx += 1
+
+    def _randomize_stair_up_scene(self, env_ids: torch.Tensor):
+        for env_id in env_ids.tolist():
+            step_height = 0.15
+            step_depth = 0.35
+            stair_width = 3.0
+            start_x = self._uniform(0.85, 1.05)
+            num_steps = 7
+            platform_length = 5.0
+            for step_idx in range(num_steps):
+                height = step_height * (step_idx + 1)
+                self._set_box_transform(
+                    self._task_scene_prim_path(int(env_id), f"stair_step_{step_idx}"),
+                    (start_x + step_depth * step_idx, 0.0, height / 2.0),
+                    (1.0, 1.0, 1.0),
+                )
+            platform_height = step_height * num_steps
+            platform_start_x = start_x + (num_steps - 0.5) * step_depth
+            self._set_box_transform(
+                self._task_scene_prim_path(int(env_id), "stair_platform"),
+                (platform_start_x + platform_length / 2.0, 0.0, platform_height / 2.0),
+                (1.0, 1.0, 1.0),
+            )
+
+    def _set_box_transform(
+        self,
+        prim_path: str,
+        pos: tuple[float, float, float],
+        scale: tuple[float, float, float],
+    ):
+        if not hasattr(self, "sim"):
+            return
+        from pxr import Gf, UsdGeom
+
+        prim = self.sim.stage.GetPrimAtPath(prim_path)
+        if not prim.IsValid():
+            return
+        xform = UsdGeom.Xformable(prim)
+        xform.ClearXformOpOrder()
+        xform.AddTranslateOp().Set(Gf.Vec3d(*pos))
+        xform.AddScaleOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(*scale))
+
+    def _uniform(self, low: float, high: float) -> float:
+        return float(torch.empty((), device=self.device).uniform_(low, high).item())
 
     def _get_rewards(self) -> torch.Tensor:
         reward = torch.zeros(self.num_envs, device=self.device)
@@ -234,31 +338,31 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         box_reward, box_logs = self._reward_box_avoidance()
         table_reward, table_logs = self._reward_under_table()
         stair_up_reward, stair_up_logs = self._reward_stair_up()
-        stair_down_reward, stair_down_logs = self._reward_stair_down()
+        flat_reward, flat_logs = self._reward_flat()
 
         reward += common_reward
 
         mask_box = self.task_id == self.TASK_BOX_AVOIDANCE
         mask_table = self.task_id == self.TASK_UNDER_TABLE
         mask_up = self.task_id == self.TASK_STAIR_UP
-        mask_down = self.task_id == self.TASK_STAIR_DOWN
+        mask_flat = self.task_id == self.TASK_FLAT
 
         reward[mask_box] += box_reward[mask_box]
         reward[mask_table] += table_reward[mask_table]
         reward[mask_up] += stair_up_reward[mask_up]
-        reward[mask_down] += stair_down_reward[mask_down]
+        reward[mask_flat] += flat_reward[mask_flat]
 
         self._log_reward_terms(
             common_logs=common_logs,
             box_logs=box_logs,
             table_logs=table_logs,
             stair_up_logs=stair_up_logs,
-            stair_down_logs=stair_down_logs,
+            flat_logs=flat_logs,
             masks={
                 "box": mask_box,
                 "under_table": mask_table,
                 "stair_up": mask_up,
-                "stair_down": mask_down,
+                "flat": mask_flat,
             },
         )
         return reward
@@ -309,15 +413,15 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         # TODO: x/z progress, stair height tracking, foot clearance/placement, stability, collision.
         return reward, logs
 
-    def _reward_stair_down(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        reward = self._task_reward_groups["stair_down"].clone()
+    def _reward_flat(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        reward = self._task_reward_groups["flat"].clone()
         logs = {
-            f"stair_down/{name}": value
-            for name, value in self._task_reward_logs["stair_down"].items()
+            f"flat/{name}": value
+            for name, value in self._task_reward_logs["flat"].items()
         }
         placeholder = torch.zeros(self.num_envs, device=self.device)
-        logs["stair_down/placeholder"] = placeholder
-        # TODO: controlled descent, stair height tracking, vertical velocity, impacts, pitch/roll stability.
+        logs["flat/placeholder"] = placeholder
+        # TODO: flat-terrain progress, velocity tracking, stability, obstacle-free locomotion.
         return reward, logs
 
     def _masked_mean(self, value: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
@@ -331,7 +435,7 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         box_logs: dict[str, torch.Tensor],
         table_logs: dict[str, torch.Tensor],
         stair_up_logs: dict[str, torch.Tensor],
-        stair_down_logs: dict[str, torch.Tensor],
+        flat_logs: dict[str, torch.Tensor],
         masks: dict[str, torch.Tensor],
     ):
         log = {}
@@ -343,13 +447,13 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             log[f"rew/{name}"] = self._masked_mean(value, masks["under_table"])
         for name, value in stair_up_logs.items():
             log[f"rew/{name}"] = self._masked_mean(value, masks["stair_up"])
-        for name, value in stair_down_logs.items():
-            log[f"rew/{name}"] = self._masked_mean(value, masks["stair_down"])
+        for name, value in flat_logs.items():
+            log[f"rew/{name}"] = self._masked_mean(value, masks["flat"])
 
         log["task/num_box"] = masks["box"].float().sum()
         log["task/num_under_table"] = masks["under_table"].float().sum()
         log["task/num_stair_up"] = masks["stair_up"].float().sum()
-        log["task/num_stair_down"] = masks["stair_down"].float().sum()
+        log["task/num_flat"] = masks["flat"].float().sum()
         self._cts_moe_reward_log = log
         self.extras.setdefault("log", {}).update(log)
 

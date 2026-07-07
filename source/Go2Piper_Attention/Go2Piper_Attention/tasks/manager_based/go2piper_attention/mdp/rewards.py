@@ -156,15 +156,34 @@ def base_ori_tracking(
 
 
 
-def base_height_tracking(    
-    env: ManagerBasedRLEnv,desired_height: float,std: float,asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+def base_height_tracking(
+    env: ManagerBasedRLEnv,
+    desired_height: float,
+    std: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
+    terrain_height_mode: str = "max",
 ):
     asset: RigidObject = env.scene[asset_cfg.name]
 
-    curr_height = asset.data.root_pos_w[:, 2] 
-    # print("curr_height",curr_height)
-    height_error = torch.abs(desired_height - curr_height)
-    # print("command_height",command_height)
+    base_height_w = asset.data.root_pos_w[:, 2]
+    sensor = env.scene.sensors[sensor_cfg.name]
+    terrain_heights_w = sensor.data.ray_hits_w[..., 2]
+    valid_hits = torch.isfinite(terrain_heights_w)
+
+    if terrain_height_mode == "mean":
+        safe_heights = torch.where(valid_hits, terrain_heights_w, torch.zeros_like(terrain_heights_w))
+        valid_counts = valid_hits.sum(dim=1).clamp(min=1)
+        local_terrain_height_w = safe_heights.sum(dim=1) / valid_counts
+    elif terrain_height_mode == "max":
+        safe_heights = torch.where(valid_hits, terrain_heights_w, torch.full_like(terrain_heights_w, -torch.inf))
+        local_terrain_height_w = torch.max(safe_heights, dim=1).values
+        local_terrain_height_w = torch.where(torch.isfinite(local_terrain_height_w), local_terrain_height_w, torch.zeros_like(local_terrain_height_w))
+    else:
+        raise ValueError(f"Unsupported terrain_height_mode: {terrain_height_mode}")
+
+    height_above_terrain = base_height_w - local_terrain_height_w
+    height_error = torch.abs(desired_height - height_above_terrain)
 
     return torch.exp(-height_error / std)
 
@@ -191,6 +210,24 @@ def track_lin_vel_xy_exp(
         torch.abs(env.command_manager.get_command(command_name)[:, :2] - asset.data.root_lin_vel_b[:, :2]),
         dim=1,
     )
+    return torch.exp(-lin_vel_error / std)
+
+
+def track_lin_vel_x_exp(
+    env: ManagerBasedRLEnv, std: float, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Reward tracking of x-axis linear velocity command using exponential kernel."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    lin_vel_error = torch.abs(env.command_manager.get_command(command_name)[:, 0] - asset.data.root_lin_vel_b[:, 0])
+    return torch.exp(-lin_vel_error / std)
+
+
+def track_lin_vel_y_exp(
+    env: ManagerBasedRLEnv, std: float, command_name: str, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Reward tracking of y-axis linear velocity command using exponential kernel."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    lin_vel_error = torch.abs(env.command_manager.get_command(command_name)[:, 1] - asset.data.root_lin_vel_b[:, 1])
     return torch.exp(-lin_vel_error / std)
 
 

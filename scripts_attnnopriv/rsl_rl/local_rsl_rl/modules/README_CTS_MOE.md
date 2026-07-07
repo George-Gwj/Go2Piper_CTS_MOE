@@ -290,7 +290,7 @@ student_gru_num_layers = 1
 num_experts = 4
 expert_hidden_dims = [256, 128]
 router_hidden_dims = [128, 64]
-expert_names = ["lateral_avoidance", "under_table", "stair_up", "stair_down"]
+expert_names = ["lateral_avoidance", "under_table", "stair_up", "flat"]
 
 critic_hidden_dims = [256, 128]
 critic_shared_trunk = False
@@ -492,14 +492,14 @@ entropy = dist.entropy().sum(dim=-1)
 - `lateral_avoidance`
 - `under_table`
 - `stair_up`
-- `stair_down`
+- `flat`
 
 默认 critic tasks：
 
 - `0`：box avoidance
 - `1`：under-table
 - `2`：stair-up
-- `3`：stair-down
+- `3`：flat
 
 Actor/router 不接收 `task_id`，避免把任务标签直接喂给策略路由器。`task_id` 只在 critic 中使用，用于为 batch 内每个样本选择对应的 value head。
 
@@ -670,7 +670,7 @@ for task in unique(task_id):
     advantage[task] = (advantage[task] - mean_task) / (std_task + eps)
 ```
 
-这样不会把 box avoidance、under-table、stair-up、stair-down 的 advantage 混在一起归一化。
+这样不会把 box avoidance、under-table、stair-up、flat 的 advantage 混在一起归一化。
 
 ## Per-Task POPArt Return Normalization
 
@@ -868,9 +868,9 @@ CTS-MoE 环境在 `ManagerRLEnv` 中预留了固定 env-task 分配和多任务 
 TASK_BOX_AVOIDANCE = 0
 TASK_UNDER_TABLE = 1
 TASK_STAIR_UP = 2
-TASK_STAIR_DOWN = 3
+TASK_FLAT = 3
 NUM_TASKS = 4
-TASK_NAMES = ("box_avoidance", "under_table", "stair_up", "stair_down")
+TASK_NAMES = ("box_avoidance", "under_table", "stair_up", "flat")
 ```
 
 配置位于 `go2piper_cts_moe_env_cfg.py`：
@@ -907,7 +907,7 @@ _reset_task_scene(env_ids)
 mask_box
 mask_under_table
 mask_stair_up
-mask_stair_down
+mask_flat
 ```
 
 reward dispatcher：
@@ -918,7 +918,7 @@ _reward_common()
 _reward_box_avoidance()
 _reward_under_table()
 _reward_stair_up()
-_reward_stair_down()
+_reward_flat()
 ```
 
 当前 reward dispatcher 按 `RewardsCfg` 中 reward term 的名称后缀自动分类：
@@ -928,7 +928,7 @@ _reward_stair_down()
 *_box_avoidance -> _reward_box_avoidance()
 *_under_table  -> _reward_under_table()
 *_stair_up     -> _reward_stair_up()
-*_stair_down   -> _reward_stair_down()
+*_flat         -> _reward_flat()
 ```
 
 对应分类逻辑在 `RewardManager.compute_grouped_by_task_marker()` 中。
@@ -959,10 +959,10 @@ logs["common/alive"]
 xxx_box_avoidance
 xxx_under_table
 xxx_stair_up
-xxx_stair_down
+xxx_flat
 ```
 
-这些 reward 会自动进入 `_reward_box_avoidance()`、`_reward_under_table()`、`_reward_stair_up()`、`_reward_stair_down()`，并只通过 task mask 加到对应 task env。
+这些 reward 会自动进入 `_reward_box_avoidance()`、`_reward_under_table()`、`_reward_stair_up()`、`_reward_flat()`，并只通过 task mask 加到对应 task env。
 
 extras 输出：
 
@@ -974,11 +974,11 @@ extras["log"]["rew/common/marked_total"]
 extras["log"]["rew/box/placeholder"]
 extras["log"]["rew/under_table/placeholder"]
 extras["log"]["rew/stair_up/placeholder"]
-extras["log"]["rew/stair_down/placeholder"]
+extras["log"]["rew/flat/placeholder"]
 extras["log"]["task/num_box"]
 extras["log"]["task/num_under_table"]
 extras["log"]["task/num_stair_up"]
-extras["log"]["task/num_stair_down"]
+extras["log"]["task/num_flat"]
 ```
 
 `task_id` 也会作为 observation dict 的顶层 key 暴露：
@@ -1122,7 +1122,70 @@ Total timesteps: 384
 task/num_box: 4
 task/num_under_table: 4
 task/num_stair_up: 4
-task/num_stair_down: 4
+task/num_flat: 4
+```
+
+### InteractiveSceneCfg 障碍物生成
+
+已在 `go2piper_cts_moe_env_cfg.py::MySceneCfg` 中手动添加 task scene objects：
+
+```text
+{ENV_REGEX_NS}/box_obstacle
+{ENV_REGEX_NS}/table_top
+{ENV_REGEX_NS}/table_leg_0..3
+{ENV_REGEX_NS}/stair_step_0..6
+{ENV_REGEX_NS}/stair_platform
+```
+
+这些对象都是带 collision 的 `sim_utils.MeshCuboidCfg`，默认放在地下隐藏。使用 MeshCuboid 是为了让 `MultiMeshRayCaster` 能扫描到真实 mesh prim。
+
+raycaster 中使用的 mesh 路径指向每个对象的真实 mesh 子 prim：
+
+```text
+{ENV_REGEX_NS}/box_obstacle/geometry/mesh
+{ENV_REGEX_NS}/table_top/geometry/mesh
+{ENV_REGEX_NS}/stair_step_*/geometry/mesh
+{ENV_REGEX_NS}/stair_platform/geometry/mesh
+```
+
+`ManagerRLEnv._reset_task_scene()` 会根据固定 `task_id` 显示并随机化对应任务的对象：
+
+```text
+box_avoidance:
+  box 在机器人前方约 1.5m
+  x: 1.35 ~ 1.65m
+  y: -0.35 ~ 0.35m
+  size_x/size_y: 0.35 ~ 0.65m
+  size_z: 0.45 ~ 0.85m
+
+under_table:
+  table 在机器人前方约 2.0m
+  table_width: 0.7 ~ 1.2m
+  tabletop_height: 0.5 ~ 0.6m
+  tabletop_length: 1.2m
+  包含桌板和 4 条桌腿
+
+stair_up:
+  stair_width: 3.0m
+  step_height: 0.1 ~ 0.2m
+  num_steps: 7
+  楼梯末端包含 `stair_platform`，平台长度 5.0m
+  platform 起点与最后一级台阶末端严密贴合
+
+flat:
+  所有 task scene objects 保持隐藏，地形为平地
+```
+
+本实现使用 USD xform op 在 reset 时设置位置和 scale。普通 Python dry-run 中没有 `pxr/sim` 时会跳过可视化对象 transform；真实 Isaac Sim 训练和 play 会执行随机化。
+
+已通过 16 env / 1 iteration smoke：
+
+```text
+Total timesteps: 384
+task/num_box: 4
+task/num_under_table: 4
+task/num_stair_up: 4
+task/num_flat: 4
 ```
 
 ## Smoke Test 目标

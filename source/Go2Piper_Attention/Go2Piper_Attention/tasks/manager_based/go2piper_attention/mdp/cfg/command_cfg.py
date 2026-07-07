@@ -77,4 +77,10 @@ class UniformVelocityCommandCfg(UniformVelocityCommandBaseCfg):
     """The maximum range
     check velocity_command.py for more details"""
 
+    flat_ranges_init: UniformVelocityCommandBaseCfg.Ranges | None = None
+    """Optional initial velocity command range used only by flat-task environments."""
+
+    flat_ranges_final: UniformVelocityCommandBaseCfg.Ranges | None = None
+    """Optional final velocity command range used only by flat-task environments."""
+
 

@@ -55,14 +55,14 @@ class FakeRewardManager:
             "box_avoidance": torch.ones(self.num_envs, device=self.device) * 1.0,
             "under_table": torch.ones(self.num_envs, device=self.device) * 2.0,
             "stair_up": torch.ones(self.num_envs, device=self.device) * 3.0,
-            "stair_down": torch.ones(self.num_envs, device=self.device) * 4.0,
+            "flat": torch.ones(self.num_envs, device=self.device) * 4.0,
         }
         grouped_logs = {
             "common": {"tracking": grouped_rewards["common"]},
             "box_avoidance": {"clearance": grouped_rewards["box_avoidance"]},
             "under_table": {"clearance": grouped_rewards["under_table"]},
             "stair_up": {"progress": grouped_rewards["stair_up"]},
-            "stair_down": {"progress": grouped_rewards["stair_down"]},
+            "flat": {"progress": grouped_rewards["flat"]},
         }
         return grouped_rewards, grouped_logs
 
@@ -115,7 +115,7 @@ def test_fixed_task_assignment_and_rewards():
     expected_reward[env.task_id == env.TASK_BOX_AVOIDANCE] += 1.0
     expected_reward[env.task_id == env.TASK_UNDER_TABLE] += 2.0
     expected_reward[env.task_id == env.TASK_STAIR_UP] += 3.0
-    expected_reward[env.task_id == env.TASK_STAIR_DOWN] += 4.0
+    expected_reward[env.task_id == env.TASK_FLAT] += 4.0
     assert torch.allclose(reward, expected_reward)
 
     required_log_keys = {
@@ -128,12 +128,12 @@ def test_fixed_task_assignment_and_rewards():
         "rew/under_table/placeholder",
         "rew/stair_up/progress",
         "rew/stair_up/placeholder",
-        "rew/stair_down/progress",
-        "rew/stair_down/placeholder",
+        "rew/flat/progress",
+        "rew/flat/placeholder",
         "task/num_box",
         "task/num_under_table",
         "task/num_stair_up",
-        "task/num_stair_down",
+        "task/num_flat",
     }
     assert required_log_keys.issubset(env.extras["log"].keys())
 

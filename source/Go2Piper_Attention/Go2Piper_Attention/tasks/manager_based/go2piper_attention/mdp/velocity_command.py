@@ -116,14 +116,10 @@ class UniformVelocityCommand(CommandTerm):
     """
 
     def _update_metrics(self):
-
-        self._init_adaptive_curriculum()
-        current_error = self._get_current_velocity_error()
-        # 更新课程参数
-        self.count = self.adaptive_curriculum.update(current_error)
-        print(f"{self.count:.3f}")
-        self.count = torch.tensor(self.count)
-        self.count = torch.tensor(self.env.common_step_counter / self.num_env_step / self.cfg.curriculum_coeff)
+        self.count = torch.tensor(
+            self.env.common_step_counter / self.num_env_step / self.cfg.curriculum_coeff,
+            device=self.device,
+        )
     
         
         # time for which the command was executed
@@ -143,11 +139,13 @@ class UniformVelocityCommand(CommandTerm):
 
         r = torch.empty(len(env_ids), device=self.device)
         if self.cfg.is_Go2ARM:
-            self.count = torch.tensor(self.env.common_step_counter / self.num_env_step / self.cfg.curriculum_coeff)
+            self.count = torch.tensor(
+                self.env.common_step_counter / self.num_env_step / self.cfg.curriculum_coeff,
+                device=self.device,
+            )
 
-            self.vel_command_b[env_ids, 0] = (r.uniform_(*self.cfg.ranges_init.lin_vel_x)) * torch.clamp((1 - self.count), 0, 1) + (r.uniform_(*self.cfg.ranges_final.lin_vel_x)) * torch.clamp(self.count, 0, 1)
-            self.vel_command_b[env_ids, 1] = (r.uniform_(*self.cfg.ranges_init.lin_vel_y)) * torch.clamp((1 - self.count), 0, 1) + (r.uniform_(*self.cfg.ranges_final.lin_vel_y)) * torch.clamp(self.count, 0, 1)
-            self.vel_command_b[env_ids, 2] = (r.uniform_(*self.cfg.ranges_init.ang_vel_z)) * torch.clamp((1 - self.count), 0, 1) + (r.uniform_(*self.cfg.ranges_final.ang_vel_z)) * torch.clamp(self.count, 0, 1)
+            self._sample_curriculum_velocity(env_ids, self.cfg.ranges_init, self.cfg.ranges_final, self.count)
+            self._resample_flat_task_command(env_ids, self.count)
  
         else:
             self.vel_command_b[env_ids, 0] = r.uniform_(*self.cfg.ranges.lin_vel_x)
@@ -161,6 +159,34 @@ class UniformVelocityCommand(CommandTerm):
             self.is_heading_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_heading_envs
         # update standing envs
         self.is_standing_env[env_ids] = r.uniform_(0.0, 1.0) <= self.cfg.rel_standing_envs
+
+    def _sample_curriculum_velocity(self, env_ids: Sequence[int], ranges_init, ranges_final, count: torch.Tensor):
+        r = torch.empty(len(env_ids), device=self.device)
+        init_weight = torch.clamp(1 - count, 0, 1)
+        final_weight = torch.clamp(count, 0, 1)
+        self.vel_command_b[env_ids, 0] = (
+            r.uniform_(*ranges_init.lin_vel_x) * init_weight
+            + r.uniform_(*ranges_final.lin_vel_x) * final_weight
+        )
+        self.vel_command_b[env_ids, 1] = (
+            r.uniform_(*ranges_init.lin_vel_y) * init_weight
+            + r.uniform_(*ranges_final.lin_vel_y) * final_weight
+        )
+        self.vel_command_b[env_ids, 2] = (
+            r.uniform_(*ranges_init.ang_vel_z) * init_weight
+            + r.uniform_(*ranges_final.ang_vel_z) * final_weight
+        )
+
+    def _resample_flat_task_command(self, env_ids: Sequence[int], count: torch.Tensor):
+        if self.cfg.flat_ranges_init is None or self.cfg.flat_ranges_final is None:
+            return
+        if not hasattr(self.env, "task_id") or not hasattr(self.env, "TASK_FLAT"):
+            return
+        env_ids_tensor = torch.as_tensor(env_ids, dtype=torch.long, device=self.device)
+        flat_env_ids = env_ids_tensor[self.env.task_id[env_ids_tensor] == self.env.TASK_FLAT]
+        if flat_env_ids.numel() == 0:
+            return
+        self._sample_curriculum_velocity(flat_env_ids, self.cfg.flat_ranges_init, self.cfg.flat_ranges_final, count)
         
     def _update_command(self):
         """Post-processes the velocity command.
@@ -258,8 +284,6 @@ class UniformVelocityCommand(CommandTerm):
                 self.previous_error = None
                 
             def update(self, current_error):
-                print("---")
-                print(f"current_error: {current_error:.3f}")
                 # 误差平滑
                 if self.smoothed_error is None:
                     self.smoothed_error = current_error
@@ -273,22 +297,17 @@ class UniformVelocityCommand(CommandTerm):
                 error_change = 0.0
                 if self.previous_error is not None:
                     error_change = self.previous_error - current_error  # 正=改进
-                    print(f"previous_error: {self.previous_error:.3f}")
 
-                print(f"error_change: {error_change:.3f}")
                 if error_change > self.improvement_threshold:
                     # 明显改进：正向加速
-                    print("加速")
                     acceleration = min(error_change / self.previous_error, 2.0)
                     target_velocity = self.base_step * (1.0 + acceleration)
                     
                 elif error_change < -self.improvement_threshold:
                     # 明显退步：减速
-                    print("减速")
                     target_velocity = -self.base_step * 0.5
                 else:
                     # 稳定状态
-                    print("稳定")
                     target_velocity = self.base_step
                 
                 # 平滑更新
@@ -296,9 +315,6 @@ class UniformVelocityCommand(CommandTerm):
                                         (1 - self.smoothing_factor) * target_velocity)
                 
                 # 更新课程参数
-                print(f"target_velocity{target_velocity:.3f}")
-                print(f"smoothed_velocity{self.smoothed_velocity:.3f}")
-
                 self.current_value = torch.clamp(
                     torch.tensor(self.current_value + self.smoothed_velocity), 
                     0.0, self.max_value

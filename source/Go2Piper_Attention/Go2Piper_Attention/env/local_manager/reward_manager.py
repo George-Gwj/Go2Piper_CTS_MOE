@@ -9,7 +9,7 @@ class RewardManager(RewardManagerBase):
         ("box_avoidance", "_box_avoidance"),
         ("under_table", "_under_table"),
         ("stair_up", "_stair_up"),
-        ("stair_down", "_stair_down"),
+        ("flat", "_flat"),
     )
 
     def __init__(self,cfg, env):
@@ -78,7 +78,7 @@ class RewardManager(RewardManagerBase):
         - ``_box_avoidance`` are used only for box-avoidance envs.
         - ``_under_table`` are used only for under-table envs.
         - ``_stair_up`` are used only for stair-up envs.
-        - ``_stair_down`` are used only for stair-down envs.
+        - ``_flat`` are used only for flat-terrain envs.
         """
         grouped_rewards = {
             group: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
