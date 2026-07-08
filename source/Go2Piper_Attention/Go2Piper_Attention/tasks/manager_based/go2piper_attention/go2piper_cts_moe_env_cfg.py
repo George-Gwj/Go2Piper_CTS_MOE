@@ -62,6 +62,20 @@ GO2ARM_TERRAINS_CFG = TerrainGeneratorCfg(
 )
 
 
+# Static task-scene obstacles: mesh colliders without a rigid body.
+# They are repositioned by ManagerRLEnv via USD xform and participate in contact
+# as static collision geometry (no gravity, no dynamic motion).
+STATIC_OBSTACLE_COLLISION_PROPS = sim_utils.CollisionPropertiesCfg(
+    collision_enabled=True,
+)
+STATIC_OBSTACLE_PHYSICS_MATERIAL = sim_utils.RigidBodyMaterialCfg(
+    friction_combine_mode="multiply",
+    restitution_combine_mode="multiply",
+    static_friction=1.0,
+    dynamic_friction=1.0,
+)
+
+
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
     """Configuration for the terrain scene with a legged robot."""
@@ -206,12 +220,15 @@ class MySceneCfg(InteractiveSceneCfg):
 
     # Task-specific static scene objects. They are spawned once for every env and then
     # only moved by ManagerRLEnv. Runtime scale is avoided because MultiMeshRayCaster
-    # caches mesh vertices at initialization.
+    # caches mesh vertices at initialization. Each object uses a static mesh collider
+    # (collision enabled, no rigid body) so ManagerRLEnv can move it at reset and the
+    # robot can still collide with it.
     box_obstacle = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/box_obstacle",
         spawn=sim_utils.MeshCuboidCfg(
             size=(0.5, 0.5, 0.65),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.85, 0.10, 0.08), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
@@ -221,14 +238,20 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/table_top",
         spawn=sim_utils.MeshCuboidCfg(
             size=(1.2, 0.95, 0.08),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.30, 0.85), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
     )
     table_leg_0 = AssetBaseCfg(
         prim_path="{ENV_REGEX_NS}/table_leg_0",
-        spawn=sim_utils.MeshCuboidCfg(size=(0.06, 0.06, 0.55), collision_props=sim_utils.CollisionPropertiesCfg()),
+        spawn=sim_utils.MeshCuboidCfg(
+            size=(0.06, 0.06, 0.55),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
+            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.30, 0.85), metallic=0.0),
+        ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
     )
     table_leg_1 = table_leg_0.replace(prim_path="{ENV_REGEX_NS}/table_leg_1")
@@ -239,7 +262,8 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/stair_step_0",
         spawn=sim_utils.MeshCuboidCfg(
             size=(0.35, 3.0, 0.15),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
@@ -248,7 +272,8 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/stair_step_1",
         spawn=sim_utils.MeshCuboidCfg(
             size=(0.35, 3.0, 0.30),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
@@ -257,7 +282,8 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/stair_step_2",
         spawn=sim_utils.MeshCuboidCfg(
             size=(0.35, 3.0, 0.45),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
@@ -266,7 +292,8 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/stair_step_3",
         spawn=sim_utils.MeshCuboidCfg(
             size=(0.35, 3.0, 0.60),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
@@ -275,7 +302,8 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/stair_step_4",
         spawn=sim_utils.MeshCuboidCfg(
             size=(0.35, 3.0, 0.75),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
@@ -284,7 +312,8 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/stair_step_5",
         spawn=sim_utils.MeshCuboidCfg(
             size=(0.35, 3.0, 0.90),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
@@ -293,7 +322,8 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/stair_step_6",
         spawn=sim_utils.MeshCuboidCfg(
             size=(0.35, 3.0, 1.05),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
@@ -302,7 +332,8 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="{ENV_REGEX_NS}/stair_platform",
         spawn=sim_utils.MeshCuboidCfg(
             size=(5.0, 3.0, 1.05),
-            collision_props=sim_utils.CollisionPropertiesCfg(),
+            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
         ),
         init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),

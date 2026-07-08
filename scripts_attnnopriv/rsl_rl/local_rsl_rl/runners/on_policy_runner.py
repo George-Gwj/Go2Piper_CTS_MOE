@@ -300,5 +300,46 @@ class OnPolicyRunner:
     def eval_mode(self):
         self.alg.policy.eval()
 
+    def get_inference_policy(self, device=None, inference_mode: str | None = None):
+        """Return a deterministic CTS-MoE policy callable for play/eval."""
+        self.eval_mode()
+        policy = self.alg.policy
+        run_device = self.device if device is None else device
+        if inference_mode is None:
+            inference_mode = "teacher" if self.training_mode == "teacher" else "teacher"
+        if inference_mode not in ("teacher", "student"):
+            raise ValueError(f"inference_mode must be 'teacher' or 'student', got {inference_mode!r}")
+
+        def _move_obs(obs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+            return {key: value.to(run_device) for key, value in obs.items()}
+
+        if inference_mode == "teacher":
+
+            def act(obs: dict[str, torch.Tensor]) -> torch.Tensor:
+                obs = _move_obs(obs)
+                out = policy(
+                    mode="teacher",
+                    proprio=obs["proprio"],
+                    task_id=obs["task_id"],
+                    height_scan=obs["height_scan"],
+                    privileged_obs=obs["privileged_obs"],
+                )
+                return out["action_mean"]
+
+            return act
+
+        def act(obs: dict[str, torch.Tensor]) -> torch.Tensor:
+            obs = _move_obs(obs)
+            out = policy(
+                mode="student",
+                proprio=obs["proprio"],
+                task_id=obs["task_id"],
+                proprio_history=obs["proprio_history"],
+                perception=obs["perception"],
+            )
+            return out["action_mean"]
+
+        return act
+
     def add_git_repo_to_log(self, repo_file_path):
         self.git_status_repos.append(repo_file_path)

@@ -41,7 +41,7 @@ def add_rsl_rl_args(parser: argparse.ArgumentParser):
         "--options",
         type=str,
         default=None,
-        help="CTS-MoE training mode override: teacher or mix/mixed. Legacy play modes: leg/arm/all.",
+        help="CTS-MoE inference mode: teacher or student. Legacy play modes: leg/arm/all.",
     )
 
 

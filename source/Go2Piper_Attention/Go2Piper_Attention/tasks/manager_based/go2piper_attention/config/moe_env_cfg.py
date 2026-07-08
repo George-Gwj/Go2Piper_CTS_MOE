@@ -66,7 +66,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # self.commands.ee_pose.ranges_init.pos_z = (0.55, 0.55)
 
         # final
-        self.commands.ee_pose.ranges_final.pos_x = (0.5, 0.5)
+        self.commands.ee_pose.ranges_final.pos_x = (0.55, 0.55)
         self.commands.ee_pose.ranges_final.pos_y = (0.0, 0.0)
         self.commands.ee_pose.ranges_final.pos_z = (0.4, 0.4)
         

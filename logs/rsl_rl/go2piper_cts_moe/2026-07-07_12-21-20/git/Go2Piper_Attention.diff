@@ -1,0 +1,847 @@
+--- git status ---
+On branch main
+Your branch is up to date with 'origin/main'.
+
+Changes to be committed:
+  (use "git restore --staged <file>..." to unstage)
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/go2piper_cts_moe_env_cfg.py
+
+Changes not staged for commit:
+  (use "git add <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+	modified:   scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/README_CTS_MOE.md
+	modified:   scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/__pycache__/structure_aware_cts_moe.cpython-310.pyc
+	modified:   scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/structure_aware_cts_moe.py
+	modified:   scripts_attnnopriv/rsl_rl/tests/__pycache__/test_cts_moe_multitask_env_interface.cpython-310.pyc
+	modified:   scripts_attnnopriv/rsl_rl/tests/test_cts_moe_multitask_env_interface.py
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/env/__pycache__/manager_env.cpython-310.pyc
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/__pycache__/reward_manager.cpython-310.pyc
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/reward_manager.py
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/env/manager_env.py
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/__pycache__/go2piper_cts_moe_env_cfg.cpython-310.pyc
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/__pycache__/moe_env_cfg.cpython-310.pyc
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/__pycache__/rsl_rl_ppo_cfg_moe.cpython-310.pyc
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/rsl_rl_ppo_cfg_moe.py
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/moe_env_cfg.py
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/go2piper_cts_moe_env_cfg.py
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/__pycache__/observations.cpython-310.pyc
+	modified:   source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/observations.py
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+	logs/rsl_rl/go2piper_cts_moe/2026-07-06_20-02-04/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-06_20-07-41/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-06_20-26-49/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-06_20-28-40/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_11-46-31/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_11-47-45/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_11-53-20/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_11-59-40/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_12-04-02/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_12-06-04/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_12-10-06/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_12-13-33/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_12-15-17/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_12-18-11/
+	logs/rsl_rl/go2piper_cts_moe/2026-07-07_12-21-20/
+	outputs/2026-07-06/20-02-04/
+	outputs/2026-07-06/20-07-41/
+	outputs/2026-07-06/20-26-49/
+	outputs/2026-07-06/20-28-40/
+	outputs/2026-07-07/
+ 
+
+
+--- git diff ---
+diff --git a/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/README_CTS_MOE.md b/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/README_CTS_MOE.md
+index 883de6b..4b2860a 100644
+--- a/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/README_CTS_MOE.md
++++ b/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/README_CTS_MOE.md
+@@ -290,7 +290,7 @@ student_gru_num_layers = 1
+ num_experts = 4
+ expert_hidden_dims = [256, 128]
+ router_hidden_dims = [128, 64]
+-expert_names = ["lateral_avoidance", "under_table", "stair_up", "stair_down"]
++expert_names = ["lateral_avoidance", "under_table", "stair_up", "flat"]
+ 
+ critic_hidden_dims = [256, 128]
+ critic_shared_trunk = False
+@@ -492,14 +492,14 @@ entropy = dist.entropy().sum(dim=-1)
+ - `lateral_avoidance`
+ - `under_table`
+ - `stair_up`
+-- `stair_down`
++- `flat`
+ 
+ 默认 critic tasks：
+ 
+ - `0`：box avoidance
+ - `1`：under-table
+ - `2`：stair-up
+-- `3`：stair-down
++- `3`：flat
+ 
+ Actor/router 不接收 `task_id`，避免把任务标签直接喂给策略路由器。`task_id` 只在 critic 中使用，用于为 batch 内每个样本选择对应的 value head。
+ 
+@@ -670,7 +670,7 @@ for task in unique(task_id):
+     advantage[task] = (advantage[task] - mean_task) / (std_task + eps)
+ ```
+ 
+-这样不会把 box avoidance、under-table、stair-up、stair-down 的 advantage 混在一起归一化。
++这样不会把 box avoidance、under-table、stair-up、flat 的 advantage 混在一起归一化。
+ 
+ ## Per-Task POPArt Return Normalization
+ 
+@@ -868,9 +868,9 @@ CTS-MoE 环境在 `ManagerRLEnv` 中预留了固定 env-task 分配和多任务
+ TASK_BOX_AVOIDANCE = 0
+ TASK_UNDER_TABLE = 1
+ TASK_STAIR_UP = 2
+-TASK_STAIR_DOWN = 3
++TASK_FLAT = 3
+ NUM_TASKS = 4
+-TASK_NAMES = ("box_avoidance", "under_table", "stair_up", "stair_down")
++TASK_NAMES = ("box_avoidance", "under_table", "stair_up", "flat")
+ ```
+ 
+ 配置位于 `go2piper_cts_moe_env_cfg.py`：
+@@ -907,7 +907,7 @@ _reset_task_scene(env_ids)
+ mask_box
+ mask_under_table
+ mask_stair_up
+-mask_stair_down
++mask_flat
+ ```
+ 
+ reward dispatcher：
+@@ -918,7 +918,7 @@ _reward_common()
+ _reward_box_avoidance()
+ _reward_under_table()
+ _reward_stair_up()
+-_reward_stair_down()
++_reward_flat()
+ ```
+ 
+ 当前 reward dispatcher 按 `RewardsCfg` 中 reward term 的名称后缀自动分类：
+@@ -928,7 +928,7 @@ _reward_stair_down()
+ *_box_avoidance -> _reward_box_avoidance()
+ *_under_table  -> _reward_under_table()
+ *_stair_up     -> _reward_stair_up()
+-*_stair_down   -> _reward_stair_down()
++*_flat         -> _reward_flat()
+ ```
+ 
+ 对应分类逻辑在 `RewardManager.compute_grouped_by_task_marker()` 中。
+@@ -959,10 +959,10 @@ logs["common/alive"]
+ xxx_box_avoidance
+ xxx_under_table
+ xxx_stair_up
+-xxx_stair_down
++xxx_flat
+ ```
+ 
+-这些 reward 会自动进入 `_reward_box_avoidance()`、`_reward_under_table()`、`_reward_stair_up()`、`_reward_stair_down()`，并只通过 task mask 加到对应 task env。
++这些 reward 会自动进入 `_reward_box_avoidance()`、`_reward_under_table()`、`_reward_stair_up()`、`_reward_flat()`，并只通过 task mask 加到对应 task env。
+ 
+ extras 输出：
+ 
+@@ -974,11 +974,11 @@ extras["log"]["rew/common/marked_total"]
+ extras["log"]["rew/box/placeholder"]
+ extras["log"]["rew/under_table/placeholder"]
+ extras["log"]["rew/stair_up/placeholder"]
+-extras["log"]["rew/stair_down/placeholder"]
++extras["log"]["rew/flat/placeholder"]
+ extras["log"]["task/num_box"]
+ extras["log"]["task/num_under_table"]
+ extras["log"]["task/num_stair_up"]
+-extras["log"]["task/num_stair_down"]
++extras["log"]["task/num_flat"]
+ ```
+ 
+ `task_id` 也会作为 observation dict 的顶层 key 暴露：
+@@ -1122,7 +1122,70 @@ Total timesteps: 384
+ task/num_box: 4
+ task/num_under_table: 4
+ task/num_stair_up: 4
+-task/num_stair_down: 4
++task/num_flat: 4
++```
++
++### InteractiveSceneCfg 障碍物生成
++
++已在 `go2piper_cts_moe_env_cfg.py::MySceneCfg` 中手动添加 task scene objects：
++
++```text
++{ENV_REGEX_NS}/box_obstacle
++{ENV_REGEX_NS}/table_top
++{ENV_REGEX_NS}/table_leg_0..3
++{ENV_REGEX_NS}/stair_step_0..6
++{ENV_REGEX_NS}/stair_platform
++```
++
++这些对象都是带 collision 的 `sim_utils.MeshCuboidCfg`，默认放在地下隐藏。使用 MeshCuboid 是为了让 `MultiMeshRayCaster` 能扫描到真实 mesh prim。
++
++raycaster 中使用的 mesh 路径指向每个对象的真实 mesh 子 prim：
++
++```text
++{ENV_REGEX_NS}/box_obstacle/geometry/mesh
++{ENV_REGEX_NS}/table_top/geometry/mesh
++{ENV_REGEX_NS}/stair_step_*/geometry/mesh
++{ENV_REGEX_NS}/stair_platform/geometry/mesh
++```
++
++`ManagerRLEnv._reset_task_scene()` 会根据固定 `task_id` 显示并随机化对应任务的对象：
++
++```text
++box_avoidance:
++  box 在机器人前方约 1.5m
++  x: 1.35 ~ 1.65m
++  y: -0.35 ~ 0.35m
++  size_x/size_y: 0.35 ~ 0.65m
++  size_z: 0.45 ~ 0.85m
++
++under_table:
++  table 在机器人前方约 2.0m
++  table_width: 0.7 ~ 1.2m
++  tabletop_height: 0.5 ~ 0.6m
++  tabletop_length: 1.2m
++  包含桌板和 4 条桌腿
++
++stair_up:
++  stair_width: 3.0m
++  step_height: 0.1 ~ 0.2m
++  num_steps: 7
++  楼梯末端包含 `stair_platform`，平台长度 5.0m
++  platform 起点与最后一级台阶末端严密贴合
++
++flat:
++  所有 task scene objects 保持隐藏，地形为平地
++```
++
++本实现使用 USD xform op 在 reset 时设置位置和 scale。普通 Python dry-run 中没有 `pxr/sim` 时会跳过可视化对象 transform；真实 Isaac Sim 训练和 play 会执行随机化。
++
++已通过 16 env / 1 iteration smoke：
++
++```text
++Total timesteps: 384
++task/num_box: 4
++task/num_under_table: 4
++task/num_stair_up: 4
++task/num_flat: 4
+ ```
+ 
+ ## Smoke Test 目标
+diff --git a/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/__pycache__/structure_aware_cts_moe.cpython-310.pyc b/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/__pycache__/structure_aware_cts_moe.cpython-310.pyc
+index c7da067..3ba6ce7 100644
+Binary files a/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/__pycache__/structure_aware_cts_moe.cpython-310.pyc and b/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/__pycache__/structure_aware_cts_moe.cpython-310.pyc differ
+diff --git a/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/structure_aware_cts_moe.py b/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/structure_aware_cts_moe.py
+index 085086e..aecff97 100644
+--- a/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/structure_aware_cts_moe.py
++++ b/scripts_attnnopriv/rsl_rl/local_rsl_rl/modules/structure_aware_cts_moe.py
+@@ -293,7 +293,7 @@ class MoEActor(nn.Module):
+         "lateral_avoidance",
+         "under_table",
+         "stair_up",
+-        "stair_down",
++        "flat",
+     )
+ 
+     def __init__(
+@@ -369,7 +369,7 @@ class SparseMultiCritic(nn.Module):
+         "box_avoidance",
+         "under_table",
+         "stair_up",
+-        "stair_down",
++        "flat",
+     )
+ 
+     def __init__(
+diff --git a/scripts_attnnopriv/rsl_rl/tests/__pycache__/test_cts_moe_multitask_env_interface.cpython-310.pyc b/scripts_attnnopriv/rsl_rl/tests/__pycache__/test_cts_moe_multitask_env_interface.cpython-310.pyc
+index f43ebfa..9336c6a 100644
+Binary files a/scripts_attnnopriv/rsl_rl/tests/__pycache__/test_cts_moe_multitask_env_interface.cpython-310.pyc and b/scripts_attnnopriv/rsl_rl/tests/__pycache__/test_cts_moe_multitask_env_interface.cpython-310.pyc differ
+diff --git a/scripts_attnnopriv/rsl_rl/tests/test_cts_moe_multitask_env_interface.py b/scripts_attnnopriv/rsl_rl/tests/test_cts_moe_multitask_env_interface.py
+index 989f00c..f549786 100644
+--- a/scripts_attnnopriv/rsl_rl/tests/test_cts_moe_multitask_env_interface.py
++++ b/scripts_attnnopriv/rsl_rl/tests/test_cts_moe_multitask_env_interface.py
+@@ -55,14 +55,14 @@ class FakeRewardManager:
+             "box_avoidance": torch.ones(self.num_envs, device=self.device) * 1.0,
+             "under_table": torch.ones(self.num_envs, device=self.device) * 2.0,
+             "stair_up": torch.ones(self.num_envs, device=self.device) * 3.0,
+-            "stair_down": torch.ones(self.num_envs, device=self.device) * 4.0,
++            "flat": torch.ones(self.num_envs, device=self.device) * 4.0,
+         }
+         grouped_logs = {
+             "common": {"tracking": grouped_rewards["common"]},
+             "box_avoidance": {"clearance": grouped_rewards["box_avoidance"]},
+             "under_table": {"clearance": grouped_rewards["under_table"]},
+             "stair_up": {"progress": grouped_rewards["stair_up"]},
+-            "stair_down": {"progress": grouped_rewards["stair_down"]},
++            "flat": {"progress": grouped_rewards["flat"]},
+         }
+         return grouped_rewards, grouped_logs
+ 
+@@ -115,7 +115,7 @@ def test_fixed_task_assignment_and_rewards():
+     expected_reward[env.task_id == env.TASK_BOX_AVOIDANCE] += 1.0
+     expected_reward[env.task_id == env.TASK_UNDER_TABLE] += 2.0
+     expected_reward[env.task_id == env.TASK_STAIR_UP] += 3.0
+-    expected_reward[env.task_id == env.TASK_STAIR_DOWN] += 4.0
++    expected_reward[env.task_id == env.TASK_FLAT] += 4.0
+     assert torch.allclose(reward, expected_reward)
+ 
+     required_log_keys = {
+@@ -128,12 +128,12 @@ def test_fixed_task_assignment_and_rewards():
+         "rew/under_table/placeholder",
+         "rew/stair_up/progress",
+         "rew/stair_up/placeholder",
+-        "rew/stair_down/progress",
+-        "rew/stair_down/placeholder",
++        "rew/flat/progress",
++        "rew/flat/placeholder",
+         "task/num_box",
+         "task/num_under_table",
+         "task/num_stair_up",
+-        "task/num_stair_down",
++        "task/num_flat",
+     }
+     assert required_log_keys.issubset(env.extras["log"].keys())
+ 
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/env/__pycache__/manager_env.cpython-310.pyc b/source/Go2Piper_Attention/Go2Piper_Attention/env/__pycache__/manager_env.cpython-310.pyc
+index 2e5ac0c..5f944c0 100644
+Binary files a/source/Go2Piper_Attention/Go2Piper_Attention/env/__pycache__/manager_env.cpython-310.pyc and b/source/Go2Piper_Attention/Go2Piper_Attention/env/__pycache__/manager_env.cpython-310.pyc differ
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/__pycache__/reward_manager.cpython-310.pyc b/source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/__pycache__/reward_manager.cpython-310.pyc
+index b37e038..4068d0d 100644
+Binary files a/source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/__pycache__/reward_manager.cpython-310.pyc and b/source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/__pycache__/reward_manager.cpython-310.pyc differ
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/reward_manager.py b/source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/reward_manager.py
+index 6257a1d..704717c 100644
+--- a/source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/reward_manager.py
++++ b/source/Go2Piper_Attention/Go2Piper_Attention/env/local_manager/reward_manager.py
+@@ -9,7 +9,7 @@ class RewardManager(RewardManagerBase):
+         ("box_avoidance", "_box_avoidance"),
+         ("under_table", "_under_table"),
+         ("stair_up", "_stair_up"),
+-        ("stair_down", "_stair_down"),
++        ("flat", "_flat"),
+     )
+ 
+     def __init__(self,cfg, env):
+@@ -78,7 +78,7 @@ class RewardManager(RewardManagerBase):
+         - ``_box_avoidance`` are used only for box-avoidance envs.
+         - ``_under_table`` are used only for under-table envs.
+         - ``_stair_up`` are used only for stair-up envs.
+-        - ``_stair_down`` are used only for stair-down envs.
++        - ``_flat`` are used only for flat-terrain envs.
+         """
+         grouped_rewards = {
+             group: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/env/manager_env.py b/source/Go2Piper_Attention/Go2Piper_Attention/env/manager_env.py
+index f9e0075..d1bc91b 100644
+--- a/source/Go2Piper_Attention/Go2Piper_Attention/env/manager_env.py
++++ b/source/Go2Piper_Attention/Go2Piper_Attention/env/manager_env.py
+@@ -12,13 +12,13 @@ class ManagerRLEnv(ManagerBasedRLEnv):
+     TASK_BOX_AVOIDANCE = 0
+     TASK_UNDER_TABLE = 1
+     TASK_STAIR_UP = 2
+-    TASK_STAIR_DOWN = 3
++    TASK_FLAT = 3
+     NUM_TASKS = 4
+     TASK_NAMES = (
+         "box_avoidance",
+         "under_table",
+         "stair_up",
+-        "stair_down",
++        "flat",
+     )
+ 
+     def __init__(self, cfg, render_mode, **kwargs):
+@@ -205,24 +205,131 @@ class ManagerRLEnv(ManagerBasedRLEnv):
+         self.mask_box = self.task_id == self.TASK_BOX_AVOIDANCE
+         self.mask_under_table = self.task_id == self.TASK_UNDER_TABLE
+         self.mask_stair_up = self.task_id == self.TASK_STAIR_UP
+-        self.mask_stair_down = self.task_id == self.TASK_STAIR_DOWN
++        self.mask_flat = self.task_id == self.TASK_FLAT
+ 
+     def _setup_task_scenes(self):
+         self._refresh_task_masks()
+-        # TODO: create or activate task-specific scene elements per fixed env mask.
+-        # mask_box: box obstacle environments
+-        # mask_under_table: table environments
+-        # mask_stair_up: stair-up terrain environments
+-        # mask_stair_down: stair-down terrain environments
++        all_env_ids = torch.arange(self.num_envs, dtype=torch.long, device=self.device)
++        self._reset_task_scene(all_env_ids)
+ 
+     def _reset_task_scene(self, env_ids: torch.Tensor):
+         task_ids = self.task_id[env_ids]
+         box_env_ids = env_ids[task_ids == self.TASK_BOX_AVOIDANCE]
+         table_env_ids = env_ids[task_ids == self.TASK_UNDER_TABLE]
+         stair_up_env_ids = env_ids[task_ids == self.TASK_STAIR_UP]
+-        stair_down_env_ids = env_ids[task_ids == self.TASK_STAIR_DOWN]
+-        _ = (box_env_ids, table_env_ids, stair_up_env_ids, stair_down_env_ids)
+-        # TODO: reset task-specific scene elements without changing task type.
++        flat_env_ids = env_ids[task_ids == self.TASK_FLAT]
++        self._hide_task_scene_prims(env_ids)
++        self._randomize_box_scene(box_env_ids)
++        self._randomize_under_table_scene(table_env_ids)
++        self._randomize_stair_up_scene(stair_up_env_ids)
++        # Flat envs deliberately keep all task-scene objects hidden.
++        _ = flat_env_ids
++
++    def _task_scene_prim_path(self, env_id: int, name: str) -> str:
++        return f"/World/envs/env_{env_id}/{name}"
++
++    def _hide_task_scene_prims(self, env_ids: torch.Tensor):
++        names = [
++            "box_obstacle",
++            "table_top",
++            "table_leg_0",
++            "table_leg_1",
++            "table_leg_2",
++            "table_leg_3",
++            "stair_step_0",
++            "stair_step_1",
++            "stair_step_2",
++            "stair_step_3",
++            "stair_step_4",
++            "stair_step_5",
++            "stair_step_6",
++            "stair_platform",
++        ]
++        for env_id in env_ids.tolist():
++            for name in names:
++                self._set_box_transform(self._task_scene_prim_path(int(env_id), name), (0.0, 0.0, -10.0), (0.01, 0.01, 0.01))
++
++    def _randomize_box_scene(self, env_ids: torch.Tensor):
++        for env_id in env_ids.tolist():
++            size_x = self._uniform(0.35, 0.65)
++            size_y = self._uniform(0.35, 0.65)
++            size_z = self._uniform(0.45, 0.85)
++            pos_x = self._uniform(1.35, 1.65)
++            pos_y = self._uniform(-0.35, 0.35)
++            self._set_box_transform(
++                self._task_scene_prim_path(int(env_id), "box_obstacle"),
++                (pos_x, pos_y, size_z / 2.0),
++                (size_x, size_y, size_z),
++            )
++
++    def _randomize_under_table_scene(self, env_ids: torch.Tensor):
++        for env_id in env_ids.tolist():
++            table_width = self._uniform(0.7, 1.2)
++            table_height = self._uniform(0.5, 0.6)
++            table_length = 1.2
++            table_x = 2.0
++            tabletop_thickness = 0.08
++            leg_size = 0.06
++            self._set_box_transform(
++                self._task_scene_prim_path(int(env_id), "table_top"),
++                (table_x, 0.0, table_height),
++                (table_length, table_width, tabletop_thickness),
++            )
++            x_offsets = (-table_length / 2.0 + 0.08, table_length / 2.0 - 0.08)
++            y_offsets = (-table_width / 2.0 + 0.08, table_width / 2.0 - 0.08)
++            leg_idx = 0
++            for x_offset in x_offsets:
++                for y_offset in y_offsets:
++                    self._set_box_transform(
++                        self._task_scene_prim_path(int(env_id), f"table_leg_{leg_idx}"),
++                        (table_x + x_offset, y_offset, table_height / 2.0),
++                        (leg_size, leg_size, table_height),
++                    )
++                    leg_idx += 1
++
++    def _randomize_stair_up_scene(self, env_ids: torch.Tensor):
++        for env_id in env_ids.tolist():
++            step_height = 0.15
++            step_depth = 0.35
++            stair_width = 3.0
++            start_x = 0.9
++            num_steps = 7
++            platform_length = 5.0
++            for step_idx in range(num_steps):
++                height = step_height * (step_idx + 1)
++                self._set_box_transform(
++                    self._task_scene_prim_path(int(env_id), f"stair_step_{step_idx}"),
++                    (start_x + step_depth * step_idx, 0.0, height / 2.0),
++                    (1.0, 1.0, 1.0),
++                )
++            platform_height = step_height * num_steps
++            platform_start_x = start_x + (num_steps - 0.5) * step_depth
++            self._set_box_transform(
++                self._task_scene_prim_path(int(env_id), "stair_platform"),
++                (platform_start_x + platform_length / 2.0, 0.0, platform_height / 2.0),
++                (1.0, 1.0, 1.0),
++            )
++
++    def _set_box_transform(
++        self,
++        prim_path: str,
++        pos: tuple[float, float, float],
++        scale: tuple[float, float, float],
++    ):
++        if not hasattr(self, "sim"):
++            return
++        from pxr import Gf, UsdGeom
++
++        prim = self.sim.stage.GetPrimAtPath(prim_path)
++        if not prim.IsValid():
++            return
++        xform = UsdGeom.Xformable(prim)
++        xform.ClearXformOpOrder()
++        xform.AddTranslateOp().Set(Gf.Vec3d(*pos))
++        xform.AddScaleOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(*scale))
++
++    def _uniform(self, low: float, high: float) -> float:
++        return float(torch.empty((), device=self.device).uniform_(low, high).item())
+ 
+     def _get_rewards(self) -> torch.Tensor:
+         reward = torch.zeros(self.num_envs, device=self.device)
+@@ -234,31 +341,31 @@ class ManagerRLEnv(ManagerBasedRLEnv):
+         box_reward, box_logs = self._reward_box_avoidance()
+         table_reward, table_logs = self._reward_under_table()
+         stair_up_reward, stair_up_logs = self._reward_stair_up()
+-        stair_down_reward, stair_down_logs = self._reward_stair_down()
++        flat_reward, flat_logs = self._reward_flat()
+ 
+         reward += common_reward
+ 
+         mask_box = self.task_id == self.TASK_BOX_AVOIDANCE
+         mask_table = self.task_id == self.TASK_UNDER_TABLE
+         mask_up = self.task_id == self.TASK_STAIR_UP
+-        mask_down = self.task_id == self.TASK_STAIR_DOWN
++        mask_flat = self.task_id == self.TASK_FLAT
+ 
+         reward[mask_box] += box_reward[mask_box]
+         reward[mask_table] += table_reward[mask_table]
+         reward[mask_up] += stair_up_reward[mask_up]
+-        reward[mask_down] += stair_down_reward[mask_down]
++        reward[mask_flat] += flat_reward[mask_flat]
+ 
+         self._log_reward_terms(
+             common_logs=common_logs,
+             box_logs=box_logs,
+             table_logs=table_logs,
+             stair_up_logs=stair_up_logs,
+-            stair_down_logs=stair_down_logs,
++            flat_logs=flat_logs,
+             masks={
+                 "box": mask_box,
+                 "under_table": mask_table,
+                 "stair_up": mask_up,
+-                "stair_down": mask_down,
++                "flat": mask_flat,
+             },
+         )
+         return reward
+@@ -309,15 +416,15 @@ class ManagerRLEnv(ManagerBasedRLEnv):
+         # TODO: x/z progress, stair height tracking, foot clearance/placement, stability, collision.
+         return reward, logs
+ 
+-    def _reward_stair_down(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+-        reward = self._task_reward_groups["stair_down"].clone()
++    def _reward_flat(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
++        reward = self._task_reward_groups["flat"].clone()
+         logs = {
+-            f"stair_down/{name}": value
+-            for name, value in self._task_reward_logs["stair_down"].items()
++            f"flat/{name}": value
++            for name, value in self._task_reward_logs["flat"].items()
+         }
+         placeholder = torch.zeros(self.num_envs, device=self.device)
+-        logs["stair_down/placeholder"] = placeholder
+-        # TODO: controlled descent, stair height tracking, vertical velocity, impacts, pitch/roll stability.
++        logs["flat/placeholder"] = placeholder
++        # TODO: flat-terrain progress, velocity tracking, stability, obstacle-free locomotion.
+         return reward, logs
+ 
+     def _masked_mean(self, value: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+@@ -331,7 +438,7 @@ class ManagerRLEnv(ManagerBasedRLEnv):
+         box_logs: dict[str, torch.Tensor],
+         table_logs: dict[str, torch.Tensor],
+         stair_up_logs: dict[str, torch.Tensor],
+-        stair_down_logs: dict[str, torch.Tensor],
++        flat_logs: dict[str, torch.Tensor],
+         masks: dict[str, torch.Tensor],
+     ):
+         log = {}
+@@ -343,13 +450,13 @@ class ManagerRLEnv(ManagerBasedRLEnv):
+             log[f"rew/{name}"] = self._masked_mean(value, masks["under_table"])
+         for name, value in stair_up_logs.items():
+             log[f"rew/{name}"] = self._masked_mean(value, masks["stair_up"])
+-        for name, value in stair_down_logs.items():
+-            log[f"rew/{name}"] = self._masked_mean(value, masks["stair_down"])
++        for name, value in flat_logs.items():
++            log[f"rew/{name}"] = self._masked_mean(value, masks["flat"])
+ 
+         log["task/num_box"] = masks["box"].float().sum()
+         log["task/num_under_table"] = masks["under_table"].float().sum()
+         log["task/num_stair_up"] = masks["stair_up"].float().sum()
+-        log["task/num_stair_down"] = masks["stair_down"].float().sum()
++        log["task/num_flat"] = masks["flat"].float().sum()
+         self._cts_moe_reward_log = log
+         self.extras.setdefault("log", {}).update(log)
+ 
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/__pycache__/go2piper_cts_moe_env_cfg.cpython-310.pyc b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/__pycache__/go2piper_cts_moe_env_cfg.cpython-310.pyc
+index de15fde..317b418 100644
+Binary files a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/__pycache__/go2piper_cts_moe_env_cfg.cpython-310.pyc and b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/__pycache__/go2piper_cts_moe_env_cfg.cpython-310.pyc differ
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/__pycache__/moe_env_cfg.cpython-310.pyc b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/__pycache__/moe_env_cfg.cpython-310.pyc
+index ac75e7c..6d13650 100644
+Binary files a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/__pycache__/moe_env_cfg.cpython-310.pyc and b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/__pycache__/moe_env_cfg.cpython-310.pyc differ
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/__pycache__/rsl_rl_ppo_cfg_moe.cpython-310.pyc b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/__pycache__/rsl_rl_ppo_cfg_moe.cpython-310.pyc
+index e586a32..f43ea93 100644
+Binary files a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/__pycache__/rsl_rl_ppo_cfg_moe.cpython-310.pyc and b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/__pycache__/rsl_rl_ppo_cfg_moe.cpython-310.pyc differ
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/rsl_rl_ppo_cfg_moe.py b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/rsl_rl_ppo_cfg_moe.py
+index 7b41856..354dc25 100644
+--- a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/rsl_rl_ppo_cfg_moe.py
++++ b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/agents/rsl_rl_ppo_cfg_moe.py
+@@ -45,7 +45,7 @@ class Go2PiperCTSMoEPolicyCfg:
+     num_experts: int = 4
+     expert_hidden_dims: list[int] = [256, 128]
+     router_hidden_dims: list[int] = [128, 64]
+-    expert_names: list[str] = ["lateral_avoidance", "under_table", "stair_up", "stair_down"]
++    expert_names: list[str] = ["lateral_avoidance", "under_table", "stair_up", "flat"]
+ 
+     # Sparse multi-critic.
+     critic_hidden_dims: list[int] = [256, 128]
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/moe_env_cfg.py b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/moe_env_cfg.py
+index 30d50c5..c247560 100644
+--- a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/moe_env_cfg.py
++++ b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/config/moe_env_cfg.py
+@@ -106,8 +106,8 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
+         # Stair-up reward weights:
+         # Add RewTerm fields ending with "_stair_up" in RewardsCfg, then configure them here.
+ 
+-        # Stair-down reward weights:
+-        # Add RewTerm fields ending with "_stair_down" in RewardsCfg, then configure them here.
++        # Flat reward weights:
++        # Add RewTerm fields ending with "_flat" in RewardsCfg, then configure them here.
+ 
+ 
+ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/go2piper_cts_moe_env_cfg.py b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/go2piper_cts_moe_env_cfg.py
+index 8d3b50b..0ecb7b9 100644
+--- a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/go2piper_cts_moe_env_cfg.py
++++ b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/go2piper_cts_moe_env_cfg.py
+@@ -113,8 +113,10 @@ class MySceneCfg(InteractiveSceneCfg):
+         prim_path="{ENV_REGEX_NS}/Robot/base",
+         mesh_prim_paths=[
+             "/World/ground",
++            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True),
++            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True),
+         ],
+-        offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.1, 0.0, 3.0)),
++        offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.35, 0.0, 3.0)),
+         ray_alignment="yaw",
+         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+         # debug_vis=True,
+@@ -125,8 +127,11 @@ class MySceneCfg(InteractiveSceneCfg):
+         prim_path="{ENV_REGEX_NS}/Robot/base",
+         mesh_prim_paths=[
+             "/World/ground",
++            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True),
++            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True),
++            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/box_obstacle", track_mesh_transforms=True),
+         ],
+-        offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.1, 0.0, 3.0)),
++        offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.35, 0.0, 3.0)),
+         ray_alignment="yaw",
+         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+         # debug_vis=True,
+@@ -137,8 +142,11 @@ class MySceneCfg(InteractiveSceneCfg):
+         prim_path="{ENV_REGEX_NS}/Robot/base",
+         mesh_prim_paths=[
+             "/World/ground",
++            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True),
++            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True),
++            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/table_top", track_mesh_transforms=True),
+         ],
+-        offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.1, 0.0, 3.0)),
++        offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.35, 0.0, 3.0)),
+         ray_alignment="yaw",
+         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
+         # debug_vis=True,
+@@ -152,11 +160,19 @@ class MySceneCfg(InteractiveSceneCfg):
+         update_period=1.0 / 30.0,
+         # 只保留当前帧
+         history_length=0,
+-        debug_vis=True,
++        debug_vis=False,
+         mesh_prim_paths=[
+             "/World/ground",
+-            # "{ENV_REGEX_NS}/box",
+-            # "{ENV_REGEX_NS}/Robot/.*",
++            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(
++                prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True
++            ),
++            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(
++                prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True
++            ),
++            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/table_top", track_mesh_transforms=True),
++            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(
++                prim_expr="{ENV_REGEX_NS}/box_obstacle", track_mesh_transforms=True
++            ),
+         ],
+         pattern_cfg=patterns.PinholeCameraPatternCfg(
+             # 保留你原来的 focal_length 数值，只重新计算 aperture 来匹配 87° × 58°
+@@ -183,27 +199,108 @@ class MySceneCfg(InteractiveSceneCfg):
+         ),
+     )
+ 
++    # Task-specific static scene objects.  They are spawned for every env and then
++    # positioned/scaled by ManagerRLEnv according to the fixed task_id.
++    box_obstacle = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/box_obstacle",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(1.0, 1.0, 1.0),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.85, 0.10, 0.08), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
+ 
+-
+-    # # rigid object
+-    # object: RigidObjectCfg = RigidObjectCfg(
+-    #     prim_path="/World/envs/env_.*/Object",
+-    #     spawn=sim_utils.MultiAssetSpawnerCfg(
+-    #         assets_cfg=[
+-    #             sim_utils.CuboidCfg(
+-    #                 size=(0.2, 0.15, 0.35),
+-    #                 visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(1.0, 0.0, 0.0), metallic=0.2),
+-    #             ),
+-    #         ],
+-    #         random_choice=True,
+-    #         rigid_props=sim_utils.RigidBodyPropertiesCfg(
+-    #             solver_position_iteration_count=4, solver_velocity_iteration_count=0
+-    #         ),
+-    #         mass_props=sim_utils.MassPropertiesCfg(mass=350.0),
+-    #         collision_props=sim_utils.CollisionPropertiesCfg(),
+-    #     ),
+-    #     init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, 0.2)),
+-    # )
++    table_top = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/table_top",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(1.0, 1.0, 1.0),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.30, 0.85), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    table_leg_0 = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/table_leg_0",
++        spawn=sim_utils.MeshCuboidCfg(size=(1.0, 1.0, 1.0), collision_props=sim_utils.CollisionPropertiesCfg()),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    table_leg_1 = table_leg_0.replace(prim_path="{ENV_REGEX_NS}/table_leg_1")
++    table_leg_2 = table_leg_0.replace(prim_path="{ENV_REGEX_NS}/table_leg_2")
++    table_leg_3 = table_leg_0.replace(prim_path="{ENV_REGEX_NS}/table_leg_3")
++
++    stair_step_0 = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/stair_step_0",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(0.35, 3.0, 0.15),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    stair_step_1 = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/stair_step_1",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(0.35, 3.0, 0.30),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    stair_step_2 = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/stair_step_2",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(0.35, 3.0, 0.45),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    stair_step_3 = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/stair_step_3",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(0.35, 3.0, 0.60),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    stair_step_4 = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/stair_step_4",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(0.35, 3.0, 0.75),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    stair_step_5 = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/stair_step_5",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(0.35, 3.0, 0.90),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    stair_step_6 = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/stair_step_6",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(0.35, 3.0, 1.05),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
++    stair_platform = AssetBaseCfg(
++        prim_path="{ENV_REGEX_NS}/stair_platform",
++        spawn=sim_utils.MeshCuboidCfg(
++            size=(5.0, 3.0, 1.05),
++            collision_props=sim_utils.CollisionPropertiesCfg(),
++            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
++        ),
++        init_state=AssetBaseCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
++    )
+ 
+                     
+ 
+@@ -270,7 +367,7 @@ class EventCfg:
+         func=mdp.reset_root_state_uniform,
+         mode="reset",
+         params={
+-            "pose_range": {"x": (-0.5, 0.5), "y": (-0.5, 0.5), "yaw": (-3.14, 3.14)},
++            "pose_range": {"x": (0.0, 0.0), "y": (0.0, 0.0), "yaw": (0.0, 0.0)},
+             "velocity_range": {
+                 "x": (0.0, 0.0),
+                 "y": (0.0, 0.0),
+@@ -936,7 +1033,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
+     """Configuration for the locomotion velocity-tracking environment."""
+ 
+     # Scene settings
+-    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=2.5)
++    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=10.0)
+     # Basic settings
+     observations: ObservationsCfg = ObservationsCfg()
+     actions: ActionsCfg = ActionsCfg()
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/__pycache__/observations.cpython-310.pyc b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/__pycache__/observations.cpython-310.pyc
+index b4bd6a6..a75f7d5 100644
+Binary files a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/__pycache__/observations.cpython-310.pyc and b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/__pycache__/observations.cpython-310.pyc differ
+diff --git a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/observations.py b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/observations.py
+index a4c9ca1..a40a349 100644
+--- a/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/observations.py
++++ b/source/Go2Piper_Attention/Go2Piper_Attention/tasks/manager_based/go2piper_attention/mdp/observations.py
+@@ -320,8 +320,9 @@ def height_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float
+     # extract the used quantities (to enable type-hinting)
+     sensor: RayCaster = env.scene.sensors[sensor_cfg.name]
+     # height scan: height = sensor_height - hit_point_z - offset
++    data = sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
+ 
+-    return sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
++    return data
+ 
+ 
+ def cts_moe_height_scan(

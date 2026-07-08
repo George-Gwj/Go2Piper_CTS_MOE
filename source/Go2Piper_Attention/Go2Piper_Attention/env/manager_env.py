@@ -224,6 +224,11 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         self._randomize_stair_up_scene(stair_up_env_ids)
         # Flat envs deliberately keep all task-scene objects hidden.
         _ = flat_env_ids
+        self._sync_task_scene_transforms()
+
+    def _sync_task_scene_transforms(self):
+        if hasattr(self, "sim"):
+            self.sim.forward()
 
     def _task_scene_prim_path(self, env_id: int, name: str) -> str:
         return f"/World/envs/env_{env_id}/{name}"

@@ -120,6 +120,7 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 100
     experiment_name = "go2piper_cts_moe"
     empirical_normalization = False
+    load_checkpoint: str = "CTSMoE_.*.pt"
 
     policy = Go2PiperCTSMoEPolicyCfg(
         proprio_dim=66,
@@ -203,6 +204,7 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
     save_interval = 100
     experiment_name = "go2piper_cts_moe_teacher"
     empirical_normalization = False
+    load_checkpoint: str = "CTSMoE_.*.pt"
 
     policy = Go2PiperCTSMoETeacherPolicyCfg(
         proprio_dim=66,
