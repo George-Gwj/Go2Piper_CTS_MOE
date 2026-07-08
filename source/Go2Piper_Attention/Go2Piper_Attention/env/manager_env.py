@@ -175,16 +175,26 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             self._refresh_task_masks()
             return
 
+        enabled_tasks = self._enabled_task_ids()
+        num_enabled = len(enabled_tasks)
         task_id = torch.empty(self.num_envs, dtype=torch.long, device=self.device)
         start = 0
-        base_count = self.num_envs // self.NUM_TASKS
-        remainder = self.num_envs % self.NUM_TASKS
-        for task in range(self.NUM_TASKS):
-            count = base_count + (1 if task < remainder else 0)
+        base_count = self.num_envs // num_enabled
+        remainder = self.num_envs % num_enabled
+        for idx, task in enumerate(enabled_tasks):
+            count = base_count + (1 if idx < remainder else 0)
             task_id[start : start + count] = task
             start += count
         self.task_id = task_id
         self._refresh_task_masks()
+
+    def _is_box_avoidance_enabled(self) -> bool:
+        return bool(getattr(self.cfg.multi_task_rewards, "enable_box_avoidance", True))
+
+    def _enabled_task_ids(self) -> list[int]:
+        if self._is_box_avoidance_enabled():
+            return list(range(self.NUM_TASKS))
+        return [self.TASK_UNDER_TABLE, self.TASK_STAIR_UP, self.TASK_FLAT]
 
     def _sample_task_ids(self, env_ids: torch.Tensor):
         task_cfg = self.cfg.multi_task_rewards
@@ -195,18 +205,23 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             return
 
         if task_cfg.task_sampling_weights is None:
-            self.task_id[env_ids] = torch.randint(
+            enabled_tasks = self._enabled_task_ids()
+            sampled_indices = torch.randint(
                 low=0,
-                high=self.NUM_TASKS,
+                high=len(enabled_tasks),
                 size=(env_ids.numel(),),
                 dtype=torch.long,
                 device=self.device,
             )
+            enabled_task_ids = torch.tensor(enabled_tasks, dtype=torch.long, device=self.device)
+            self.task_id[env_ids] = enabled_task_ids[sampled_indices]
             return
 
         weights = torch.tensor(task_cfg.task_sampling_weights, dtype=torch.float, device=self.device)
         if weights.numel() != self.NUM_TASKS:
             raise ValueError(f"task_sampling_weights must have length {self.NUM_TASKS}")
+        if not self._is_box_avoidance_enabled():
+            weights[self.TASK_BOX_AVOIDANCE] = 0.0
         if torch.any(weights < 0) or weights.sum() <= 0:
             raise ValueError("task_sampling_weights must be non-negative and have positive sum")
         probabilities = weights / weights.sum()
@@ -216,6 +231,8 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _validate_task_id(self, task_id: int):
         if task_id < 0 or task_id >= self.NUM_TASKS:
             raise ValueError(f"fixed_task_id must be in [0, {self.NUM_TASKS - 1}], got {task_id}")
+        if task_id == self.TASK_BOX_AVOIDANCE and not self._is_box_avoidance_enabled():
+            raise ValueError("box_avoidance is disabled via multi_task_rewards.enable_box_avoidance=False")
 
     def _refresh_task_masks(self):
         self.mask_box = self.task_id == self.TASK_BOX_AVOIDANCE
@@ -235,7 +252,8 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         stair_up_env_ids = env_ids[task_ids == self.TASK_STAIR_UP]
         flat_env_ids = env_ids[task_ids == self.TASK_FLAT]
         self._hide_task_scene_prims(env_ids)
-        self._randomize_box_scene(box_env_ids)
+        if self._is_box_avoidance_enabled():
+            self._randomize_box_scene(box_env_ids)
         self._randomize_under_table_scene(table_env_ids)
         self._randomize_stair_up_scene(stair_up_env_ids)
         # Flat envs deliberately keep all task-scene objects hidden.

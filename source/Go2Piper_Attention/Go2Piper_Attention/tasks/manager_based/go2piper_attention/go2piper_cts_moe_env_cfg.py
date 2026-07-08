@@ -522,13 +522,13 @@ class CommandsCfg:
         is_Go2ARM=True,
         curriculum_coeff= 1000,         
         ranges=mdp.command_cfg.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.2, 1.0), lin_vel_y=(-0.5, 0.5), ang_vel_z=(-0.5, 0.5),heading=(-0.0, 0.0)
+            lin_vel_x=(0.2, 1.0), lin_vel_y=(0.0, 0.0), ang_vel_z=(0.0, 0.0), heading=(-0.0, 0.0)
         ),
         ranges_final=mdp.command_cfg.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.1, 0.8), lin_vel_y=(-0.5, 0.5), ang_vel_z=(-0.5, 0.5),heading=(-0.0, 0.0)
+            lin_vel_x=(-0.0, 0.8), lin_vel_y=(0.0, 0.0), ang_vel_z=(0.0, 0.0), heading=(-0.0, 0.0)
         ),
         ranges_init=mdp.command_cfg.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(0.1, 0.35), lin_vel_y=(-0.1, 0.1), ang_vel_z=(-0.1, 0.1),heading=(-0.0, 0.0)
+            lin_vel_x=(-0.0, 0.3), lin_vel_y=(0.0, 0.0), ang_vel_z=(0.0, 0.0), heading=(-0.0, 0.0)
         ),
     )
 
@@ -1131,6 +1131,7 @@ class MultiTaskRewardCfg:
     fixed_task_assignment: bool = True
     fixed_task_id: int | None = None
     task_sampling_weights: list[float] | None = None
+    enable_box_avoidance: bool = True
 
 
 @configclass

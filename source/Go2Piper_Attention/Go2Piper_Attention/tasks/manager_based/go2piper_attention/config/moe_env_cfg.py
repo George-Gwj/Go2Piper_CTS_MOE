@@ -28,6 +28,9 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.scene.terrain.terrain_type = "plane"
         self.scene.terrain.terrain_generator = None
 
+        # Temporarily disable box-avoidance task; keep its obstacle underground.
+        self.multi_task_rewards.enable_box_avoidance = False
+
         ##  velocity command
         self.commands.base_velocity.curriculum_coeff = 4000
         # init
@@ -42,14 +45,14 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # Flat task can use a separate command curriculum while other tasks keep the ranges above.
         self.commands.base_velocity.flat_ranges_init = command_cfg.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-0.0, 0.3),
-            lin_vel_y=(-0.1, 0.1),
-            ang_vel_z=(-0.1, 0.1),
+            lin_vel_y=(0.0, 0.0),
+            ang_vel_z=(0.0, 0.0),
             heading=(-0.0, 0.0),
         )
         self.commands.base_velocity.flat_ranges_final = command_cfg.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-0.0, 0.8),
-            lin_vel_y=(-0.5, 0.5),
-            ang_vel_z=(-0.5, 0.5),
+            lin_vel_y=(0.0, 0.0),
+            ang_vel_z=(0.0, 0.0),
             heading=(-0.0, 0.0),
         )
   
@@ -111,7 +114,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # Box-avoidance reward weights:
         # Add RewTerm fields ending with "_box_avoidance" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_box_avoidance.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_box_avoidance.weight = 0.5
+        self.rewards.track_lin_vel_y_exp_box_avoidance.weight = 4.0
         self.rewards.track_base_height_exp_box_avoidance.weight = 1.0
         self.rewards.lin_vel_z_l2_box_avoidance.weight = -2.5
         self.rewards.thigh_contact_box_avoidance.weight = -1.0
@@ -169,7 +172,7 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
 
         # make a smaller scene for play
         self.scene.num_envs = 50
-        self.scene.env_spacing = 2.5
+        self.scene.env_spacing = 10.0
         # disable randomization for play
         self.observations.proprio.enable_corruption = False
         self.observations.proprio_history.enable_corruption = False
@@ -198,8 +201,8 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         
         # final
         self.commands.base_velocity.ranges.lin_vel_x = (-0.0, 1.0)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
+        self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
        
         self.commands.ee_pose.resampling_time_range = (2.5, 3.5) 
 
