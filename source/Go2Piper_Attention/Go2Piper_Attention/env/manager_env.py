@@ -20,6 +20,22 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         "stair_up",
         "flat",
     )
+    TASK_SCENE_OBJECT_NAMES = (
+        "box_obstacle",
+        "table_top",
+        "table_leg_0",
+        "table_leg_1",
+        "table_leg_2",
+        "table_leg_3",
+        "stair_step_0",
+        "stair_step_1",
+        "stair_step_2",
+        "stair_step_3",
+        "stair_step_4",
+        "stair_step_5",
+        "stair_step_6",
+        "stair_platform",
+    )
 
     def __init__(self, cfg, render_mode, **kwargs):
         super().__init__(cfg=cfg)
@@ -227,111 +243,112 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         self._sync_task_scene_transforms()
 
     def _sync_task_scene_transforms(self):
+        if hasattr(self, "scene"):
+            self.scene.write_data_to_sim()
         if hasattr(self, "sim"):
             self.sim.forward()
 
-    def _task_scene_prim_path(self, env_id: int, name: str) -> str:
-        return f"/World/envs/env_{env_id}/{name}"
+    def _hidden_obstacle_positions(self, count: int) -> torch.Tensor:
+        positions = torch.zeros(count, 3, device=self.device)
+        positions[:, 2] = -10.0
+        return positions
+
+    def _set_obstacle_poses(self, object_name: str, env_ids: torch.Tensor, env_local_positions: torch.Tensor):
+        if env_ids.numel() == 0:
+            return
+        root_state = torch.zeros(env_ids.numel(), 13, device=self.device)
+        root_state[:, :3] = env_local_positions + self.scene.env_origins[env_ids]
+        root_state[:, 3] = 1.0
+        self.scene[object_name].write_root_state_to_sim(root_state, env_ids=env_ids)
 
     def _hide_task_scene_prims(self, env_ids: torch.Tensor):
-        names = [
-            "box_obstacle",
-            "table_top",
-            "table_leg_0",
-            "table_leg_1",
-            "table_leg_2",
-            "table_leg_3",
-            "stair_step_0",
-            "stair_step_1",
-            "stair_step_2",
-            "stair_step_3",
-            "stair_step_4",
-            "stair_step_5",
-            "stair_step_6",
-            "stair_platform",
-        ]
-        for env_id in env_ids.tolist():
-            for name in names:
-                self._set_box_transform(self._task_scene_prim_path(int(env_id), name), (0.0, 0.0, -10.0), (1.0, 1.0, 1.0))
+        if env_ids.numel() == 0:
+            return
+        hidden_positions = self._hidden_obstacle_positions(env_ids.numel())
+        for name in self.TASK_SCENE_OBJECT_NAMES:
+            self._set_obstacle_poses(name, env_ids, hidden_positions)
 
     def _randomize_box_scene(self, env_ids: torch.Tensor):
-        for env_id in env_ids.tolist():
-            size_z = 0.65
-            pos_x = self._uniform(1.35, 1.65)
-            pos_y = self._uniform(-0.35, 0.35)
-            self._set_box_transform(
-                self._task_scene_prim_path(int(env_id), "box_obstacle"),
-                (pos_x, pos_y, size_z / 2.0),
-                (1.0, 1.0, 1.0),
-            )
+        if env_ids.numel() == 0:
+            return
+        size_z = 0.65
+        pos_x = torch.empty(env_ids.numel(), device=self.device).uniform_(1.35, 1.65)
+        pos_y = torch.empty(env_ids.numel(), device=self.device).uniform_(-0.35, 0.35)
+        pos_z = torch.full((env_ids.numel(),), size_z / 2.0, device=self.device)
+        positions = torch.stack([pos_x, pos_y, pos_z], dim=-1)
+        self._set_obstacle_poses("box_obstacle", env_ids, positions)
 
     def _randomize_under_table_scene(self, env_ids: torch.Tensor):
-        for env_id in env_ids.tolist():
-            table_width = 0.95
-            table_height = 0.55
-            table_length = 1.2
-            table_x = self._uniform(1.85, 2.15)
-            table_y = self._uniform(-0.10, 0.10)
-            self._set_box_transform(
-                self._task_scene_prim_path(int(env_id), "table_top"),
-                (table_x, table_y, table_height),
-                (1.0, 1.0, 1.0),
-            )
-            x_offsets = (-table_length / 2.0 + 0.08, table_length / 2.0 - 0.08)
-            y_offsets = (-table_width / 2.0 + 0.08, table_width / 2.0 - 0.08)
-            leg_idx = 0
-            for x_offset in x_offsets:
-                for y_offset in y_offsets:
-                    self._set_box_transform(
-                        self._task_scene_prim_path(int(env_id), f"table_leg_{leg_idx}"),
-                        (table_x + x_offset, table_y + y_offset, table_height / 2.0),
-                        (1.0, 1.0, 1.0),
-                    )
-                    leg_idx += 1
+        if env_ids.numel() == 0:
+            return
+        table_width = 0.95
+        table_height = 0.55
+        table_length = 1.2
+        table_x = torch.empty(env_ids.numel(), device=self.device).uniform_(1.85, 2.15)
+        table_y = torch.empty(env_ids.numel(), device=self.device).uniform_(-0.10, 0.10)
+        self._set_obstacle_poses(
+            "table_top",
+            env_ids,
+            torch.stack(
+                [table_x, table_y, torch.full((env_ids.numel(),), table_height, device=self.device)],
+                dim=-1,
+            ),
+        )
+        x_offsets = (-table_length / 2.0 + 0.08, table_length / 2.0 - 0.08)
+        y_offsets = (-table_width / 2.0 + 0.08, table_width / 2.0 - 0.08)
+        leg_idx = 0
+        for x_offset in x_offsets:
+            for y_offset in y_offsets:
+                self._set_obstacle_poses(
+                    f"table_leg_{leg_idx}",
+                    env_ids,
+                    torch.stack(
+                        [
+                            table_x + x_offset,
+                            table_y + y_offset,
+                            torch.full((env_ids.numel(),), table_height / 2.0, device=self.device),
+                        ],
+                        dim=-1,
+                    ),
+                )
+                leg_idx += 1
 
     def _randomize_stair_up_scene(self, env_ids: torch.Tensor):
-        for env_id in env_ids.tolist():
-            step_height = 0.15
-            step_depth = 0.35
-            stair_width = 3.0
-            start_x = self._uniform(0.85, 1.05)
-            num_steps = 7
-            platform_length = 5.0
-            for step_idx in range(num_steps):
-                height = step_height * (step_idx + 1)
-                self._set_box_transform(
-                    self._task_scene_prim_path(int(env_id), f"stair_step_{step_idx}"),
-                    (start_x + step_depth * step_idx, 0.0, height / 2.0),
-                    (1.0, 1.0, 1.0),
-                )
-            platform_height = step_height * num_steps
-            platform_start_x = start_x + (num_steps - 0.5) * step_depth
-            self._set_box_transform(
-                self._task_scene_prim_path(int(env_id), "stair_platform"),
-                (platform_start_x + platform_length / 2.0, 0.0, platform_height / 2.0),
-                (1.0, 1.0, 1.0),
+        if env_ids.numel() == 0:
+            return
+        step_height = 0.15
+        step_depth = 0.35
+        start_x = torch.empty(env_ids.numel(), device=self.device).uniform_(0.85, 1.05)
+        num_steps = 7
+        platform_length = 5.0
+        for step_idx in range(num_steps):
+            height = step_height * (step_idx + 1)
+            self._set_obstacle_poses(
+                f"stair_step_{step_idx}",
+                env_ids,
+                torch.stack(
+                    [
+                        start_x + step_depth * step_idx,
+                        torch.zeros(env_ids.numel(), device=self.device),
+                        torch.full((env_ids.numel(),), height / 2.0, device=self.device),
+                    ],
+                    dim=-1,
+                ),
             )
-
-    def _set_box_transform(
-        self,
-        prim_path: str,
-        pos: tuple[float, float, float],
-        scale: tuple[float, float, float],
-    ):
-        if not hasattr(self, "sim"):
-            return
-        from pxr import Gf, UsdGeom
-
-        prim = self.sim.stage.GetPrimAtPath(prim_path)
-        if not prim.IsValid():
-            return
-        xform = UsdGeom.Xformable(prim)
-        xform.ClearXformOpOrder()
-        xform.AddTranslateOp().Set(Gf.Vec3d(*pos))
-        xform.AddScaleOp(UsdGeom.XformOp.PrecisionDouble).Set(Gf.Vec3d(*scale))
-
-    def _uniform(self, low: float, high: float) -> float:
-        return float(torch.empty((), device=self.device).uniform_(low, high).item())
+        platform_height = step_height * num_steps
+        platform_start_x = start_x + (num_steps - 0.5) * step_depth
+        self._set_obstacle_poses(
+            "stair_platform",
+            env_ids,
+            torch.stack(
+                [
+                    platform_start_x + platform_length / 2.0,
+                    torch.zeros(env_ids.numel(), device=self.device),
+                    torch.full((env_ids.numel(),), platform_height / 2.0, device=self.device),
+                ],
+                dim=-1,
+            ),
+        )
 
     def _get_rewards(self) -> torch.Tensor:
         reward = torch.zeros(self.num_envs, device=self.device)
