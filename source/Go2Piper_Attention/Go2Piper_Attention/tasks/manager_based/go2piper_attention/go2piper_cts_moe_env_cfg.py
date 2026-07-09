@@ -172,7 +172,7 @@ class MySceneCfg(InteractiveSceneCfg):
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
         # debug_vis=True,
-        debug_vis=False,
+        debug_vis=True,
     )
 
     depth_image = MultiMeshRayCasterCameraCfg(
@@ -240,9 +240,11 @@ class MySceneCfg(InteractiveSceneCfg):
     table_top = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/table_top",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(1.2, 0.95, 0.08),
+            size=(0.95, 1.2, 0.08),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
+            collision_props=sim_utils.CollisionPropertiesCfg(
+                collision_enabled=False,
+            ),
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
             visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.30, 0.85), metallic=0.0),
         ),
@@ -266,7 +268,7 @@ class MySceneCfg(InteractiveSceneCfg):
     stair_step_0 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/stair_step_0",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.15),
+            size=(0.35, 3.0, 0.1),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
@@ -277,7 +279,7 @@ class MySceneCfg(InteractiveSceneCfg):
     stair_step_1 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/stair_step_1",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.30),
+            size=(0.35, 3.0, 0.2),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
@@ -288,7 +290,7 @@ class MySceneCfg(InteractiveSceneCfg):
     stair_step_2 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/stair_step_2",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.45),
+            size=(0.35, 3.0, 0.3),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
@@ -299,7 +301,7 @@ class MySceneCfg(InteractiveSceneCfg):
     stair_step_3 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/stair_step_3",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.60),
+            size=(0.35, 3.0, 0.4),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
@@ -310,7 +312,7 @@ class MySceneCfg(InteractiveSceneCfg):
     stair_step_4 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/stair_step_4",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.75),
+            size=(0.35, 3.0, 0.5),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
@@ -321,7 +323,7 @@ class MySceneCfg(InteractiveSceneCfg):
     stair_step_5 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/stair_step_5",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.90),
+            size=(0.35, 3.0, 0.6),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
@@ -332,7 +334,7 @@ class MySceneCfg(InteractiveSceneCfg):
     stair_step_6 = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/stair_step_6",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 1.05),
+            size=(0.35, 3.0, 0.7),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
@@ -343,7 +345,7 @@ class MySceneCfg(InteractiveSceneCfg):
     stair_platform = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/stair_platform",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(5.0, 3.0, 1.05),
+            size=(5.0, 3.0, 0.7),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
             physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
@@ -840,7 +842,7 @@ class RewardsCfg:
         func=mdp.base_height_tracking, 
         weight=0.5,
          params={ 
-                 "desired_height": 0.22, 
+                 "desired_height": 0.24, 
                  "std": 0.02}
     )
 
@@ -908,7 +910,27 @@ class RewardsCfg:
         },
     )
 
-    feet_height_common = RewTerm(
+    feet_height_flat = RewTerm(
+        func=mdp.feet_height,
+        weight=0.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            "tanh_mult": 2.0,
+            "target_height": 0.08,
+            "command_name": "base_velocity",
+        },
+    )
+    feet_height_under_table = RewTerm(
+        func=mdp.feet_height,
+        weight=0.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            "tanh_mult": 2.0,
+            "target_height": 0.08,
+            "command_name": "base_velocity",
+        },
+    )
+    feet_height_box_avoidance = RewTerm(
         func=mdp.feet_height,
         weight=0.0,
         params={
@@ -929,28 +951,28 @@ class RewardsCfg:
     )
     
 
-    feet_height_body_common = RewTerm(
+    feet_height_body_stair_up = RewTerm(
         func=mdp.feet_height_body,
         weight=0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
             "tanh_mult": 2.0,
-            "target_height": -0.2,
+            "target_height": -0.15,
             "command_name": "base_velocity",
         },
     )
     
 
-    feet_height_common = RewTerm(
-        func=mdp.feet_height,
-        weight=-0.1,
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "tanh_mult": 2.0,
-            "target_height": 0.08,
-            "command_name": "base_velocity",
-        },
-    )
+    # feet_height_common = RewTerm(
+    #     func=mdp.feet_height,
+    #     weight=-0.1,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+    #         "tanh_mult": 2.0,
+    #         "target_height": 0.08,
+    #         "command_name": "base_velocity",
+    #     },
+    # )
     
     foot_contact_common = RewTerm(
         func=mdp.standing_feet_contact_force,
@@ -1029,7 +1051,16 @@ class RewardsCfg:
 
     # height_exp_reward = RewTerm(func=mdp.base_height_exp, weight=-2.0, params={"target_height": 0.31, "std":0.03})
 
-   
+    probe_clearance_under_table = RewTerm(
+        func=mdp.probe_links_below_height_exp,
+        weight=0.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["probe0", "probe1", "probe2"]),
+            "max_height": 0.5,
+            "std": 0.05,
+        },
+    )
+
    
     thigh_contact_box_avoidance = RewTerm(
         func=mdp.undesired_contacts,

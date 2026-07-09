@@ -710,9 +710,24 @@ def base_height_exp(
     return output
 
 
+def probe_links_below_height_exp(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    max_height: float = 0.5,
+    std: float = 0.05,
+) -> torch.Tensor:
+    """Reward keeping probe links below a world-frame height threshold.
+
+    Uses the maximum probe height so all listed links must stay under ``max_height``
+    to receive full reward. Reward decays exponentially as any probe exceeds the limit.
+    """
+    asset: Articulation = env.scene[asset_cfg.name]
+    probe_heights = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+    max_probe_z = probe_heights.max(dim=1).values
+    excess = torch.clamp(max_probe_z - max_height, min=0.0)
+    return torch.exp(-excess / std)
 
 
-def body_lin_acc_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalize the linear acceleration of bodies using L2-kernel."""
     asset: Articulation = env.scene[asset_cfg.name]
     return torch.sum(torch.norm(asset.data.body_lin_acc_w[:, asset_cfg.body_ids, :], dim=-1), dim=1)

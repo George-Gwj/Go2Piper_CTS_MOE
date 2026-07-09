@@ -35,6 +35,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.commands.base_velocity.curriculum_coeff = 4000
         # init
         self.commands.base_velocity.rel_standing_envs = 0.1
+        self.commands.base_velocity.resampling_time_range = (1e6, 1e6)
         self.commands.base_velocity.ranges_init.lin_vel_x  = (-0.0, 0.3)
         self.commands.base_velocity.ranges_init.lin_vel_y  = (0.0, 0.0)
         self.commands.base_velocity.ranges_init.ang_vel_z  = (0.0, 0.0)
@@ -98,8 +99,8 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.feet_slide_common.weight = -0.05
         self.rewards.F_feet_air_time_common.weight = 0.0 #0.5
         self.rewards.R_feet_air_time_common.weight = 0.0 #0.5
-        self.rewards.feet_height_common.weight = -0.2 #TODO # -0.2
-        self.rewards.feet_height_body_common.weight = -0.0 # 0.5 #TODO 
+        # self.rewards.feet_height_common.weight = -0.2 #TODO # -0.2
+        # self.rewards.feet_height_body_common.weight = -0.0 # 0.5 #TODO 
         self.rewards.foot_contact_common.weight = 0.005
         self.rewards.joint_mirror_common.weight =  -0.05
         self.rewards.gait_reward_common.weight = 1.0 # 1.0
@@ -122,18 +123,21 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.base_contact_box_avoidance.weight = -1.0
         self.rewards.arm_contact_box_avoidance.weight = -1.0
         self.rewards.flat_orientation_l2_box_avoidance.weight = -0.5 # -0.5
+        self.rewards.feet_height_box_avoidance.weight = -0.2
 
         # Under-table reward weights:
         # Add RewTerm fields ending with "_under_table" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_under_table.weight = 4.0
         self.rewards.track_lin_vel_y_exp_under_table.weight = 4.0
-        self.rewards.track_base_height_exp_under_table.weight = 1.0
+        self.rewards.track_base_height_exp_under_table.weight = 2.0
         self.rewards.lin_vel_z_l2_under_table.weight = -1.0
         self.rewards.thigh_contact_under_table.weight = -1.0
         self.rewards.calf_contact_under_table.weight = -1.0
         self.rewards.base_contact_under_table.weight = -1.0
         self.rewards.arm_contact_under_table.weight = -1.0
         self.rewards.flat_orientation_l2_under_table.weight = -0.5 # -0.5
+        self.rewards.feet_height_under_table.weight = -0.2
+        self.rewards.probe_clearance_under_table.weight = 2.0
 
         # Stair-up reward weights:
         # Add RewTerm fields ending with "_stair_up" in RewardsCfg, then configure them here.
@@ -146,6 +150,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.base_contact_stair_up.weight = -1.0
         self.rewards.arm_contact_stair_up.weight = -1.0
         self.rewards.flat_orientation_l2_stair_up.weight = -0.0 # -0.5
+        self.rewards.feet_height_body_stair_up.weight = -2.0
 
 
         # Flat reward weights:
@@ -159,6 +164,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.base_contact_flat.weight = -0.5
         self.rewards.arm_contact_flat.weight = -0.5
         self.rewards.flat_orientation_l2_flat.weight = -0.5 # -0.5
+        self.rewards.feet_height_flat.weight = -0.2
 
 
 
@@ -196,19 +202,19 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
   
         self.commands.ee_pose.is_Go2ARM_Play = True
         
-        self.commands.base_velocity.resampling_time_range = (5.0,5.0)
+        self.commands.base_velocity.resampling_time_range = (1e6, 1e6)
         self.commands.base_velocity.rel_standing_envs = 0.1
         
         # final
-        self.commands.base_velocity.ranges.lin_vel_x = (-0.0, 1.0)
+        self.commands.base_velocity.ranges.lin_vel_x = (-0.0, 0.8)
         self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
         self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
        
-        self.commands.ee_pose.resampling_time_range = (2.5, 3.5) 
+        self.commands.ee_pose.resampling_time_range = (1e6, 1e6)
 
-        self.commands.ee_pose.ranges.pos_x = (0.4, 0.6)
-        self.commands.ee_pose.ranges.pos_y = (-0.1, 0.1)
-        self.commands.ee_pose.ranges.pos_z = (0.1, 0.6)
+        self.commands.ee_pose.ranges.pos_x = (0.55, 0.55)
+        self.commands.ee_pose.ranges.pos_y = (0.0, 0.0)
+        self.commands.ee_pose.ranges.pos_z = (0.4, 0.4)
 
         # self.commands.ee_pose.ranges.pos_x = (0.5, 0.5)
         # self.commands.ee_pose.ranges.pos_y = (-0.0, 0.0)

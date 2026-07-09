@@ -299,9 +299,9 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _randomize_under_table_scene(self, env_ids: torch.Tensor):
         if env_ids.numel() == 0:
             return
-        table_width = 0.95
-        table_height = 0.55
-        table_length = 1.2
+        table_depth_x = 0.95
+        table_span_y = 1.2
+        table_height = 0.6
         table_x = torch.empty(env_ids.numel(), device=self.device).uniform_(1.85, 2.15)
         table_y = torch.empty(env_ids.numel(), device=self.device).uniform_(-0.10, 0.10)
         self._set_obstacle_poses(
@@ -312,8 +312,8 @@ class ManagerRLEnv(ManagerBasedRLEnv):
                 dim=-1,
             ),
         )
-        x_offsets = (-table_length / 2.0 + 0.08, table_length / 2.0 - 0.08)
-        y_offsets = (-table_width / 2.0 + 0.08, table_width / 2.0 - 0.08)
+        x_offsets = (-table_depth_x / 2.0 + 0.08, table_depth_x / 2.0 - 0.08)
+        y_offsets = (-table_span_y / 2.0 + 0.08, table_span_y / 2.0 - 0.08)
         leg_idx = 0
         for x_offset in x_offsets:
             for y_offset in y_offsets:
@@ -334,7 +334,7 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _randomize_stair_up_scene(self, env_ids: torch.Tensor):
         if env_ids.numel() == 0:
             return
-        step_height = 0.15
+        step_height = 0.1
         step_depth = 0.35
         start_x = torch.empty(env_ids.numel(), device=self.device).uniform_(0.85, 1.05)
         num_steps = 7
