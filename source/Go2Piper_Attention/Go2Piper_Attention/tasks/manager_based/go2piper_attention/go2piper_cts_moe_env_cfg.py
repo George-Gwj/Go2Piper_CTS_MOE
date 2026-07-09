@@ -839,11 +839,13 @@ class RewardsCfg:
     )
 
     track_base_height_exp_under_table = RewTerm(
-        func=mdp.base_height_tracking, 
+        func=mdp.base_height_tracking_in_table_region,
         weight=0.5,
-         params={ 
-                 "desired_height": 0.24, 
-                 "std": 0.02}
+        params={
+            "desired_height": 0.24,
+            "std": 0.02,
+            "table_half_extents_xy": (0.475 + 0.2, 0.6),
+        },
     )
 
     track_base_height_exp_stair_up = RewTerm(
@@ -1052,12 +1054,13 @@ class RewardsCfg:
     # height_exp_reward = RewTerm(func=mdp.base_height_exp, weight=-2.0, params={"target_height": 0.31, "std":0.03})
 
     probe_clearance_under_table = RewTerm(
-        func=mdp.probe_links_below_height_exp,
+        func=mdp.probe_links_below_height_exp_in_table_region,
         weight=0.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=["probe0", "probe1", "probe2"]),
             "max_height": 0.5,
             "std": 0.05,
+            "table_half_extents_xy": (0.475 + 0.2, 0.6),
         },
     )
 

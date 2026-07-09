@@ -48,6 +48,7 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             self._setup_task_scenes()
             self.prev_base_pos = torch.zeros(self.num_envs, 3, device=self.device)
             self.prev_base_pos[:] = self.robot.data.root_pos_w[:, :3]
+            self._cts_moe_task_metrics_log: dict[str, torch.Tensor] = {}
             self._publish_task_extras()
 
 
@@ -469,6 +470,62 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             return value[mask].mean()
         return torch.zeros((), device=self.device)
 
+    def _compute_base_height_above_terrain(self) -> torch.Tensor:
+        """Return base height above local terrain for every env."""
+        base_height_w = self.robot.data.root_pos_w[:, 2]
+        if hasattr(self.scene, "sensors") and "height_scanner" in self.scene.sensors:
+            sensor = self.scene.sensors["height_scanner"]
+            terrain_heights_w = sensor.data.ray_hits_w[..., 2]
+            valid_hits = torch.isfinite(terrain_heights_w)
+            safe_heights = torch.where(valid_hits, terrain_heights_w, torch.full_like(terrain_heights_w, -torch.inf))
+            local_terrain_height_w = torch.max(safe_heights, dim=1).values
+            local_terrain_height_w = torch.where(
+                torch.isfinite(local_terrain_height_w),
+                local_terrain_height_w,
+                torch.zeros_like(local_terrain_height_w),
+            )
+            return base_height_w - local_terrain_height_w
+        return base_height_w
+
+    def _get_per_env_command_metrics(self) -> dict[str, torch.Tensor]:
+        """Collect instantaneous command-tracking metrics for each env."""
+        metrics: dict[str, torch.Tensor] = {}
+
+        ee_term = self.command_manager.get_term("ee_pose")
+        metrics["ee_pose/position_error"] = ee_term.metrics["position_error"]
+        metrics["ee_pose/orientation_error"] = ee_term.metrics["orientation_error"]
+
+        vel_term = self.command_manager.get_term("base_velocity")
+        vel_command = vel_term.command
+        metrics["base_velocity/error_vel_xy"] = torch.norm(
+            vel_command[:, :2] - self.robot.data.root_lin_vel_b[:, :2],
+            dim=-1,
+        )
+        metrics["base_velocity/error_vel_yaw"] = torch.abs(
+            vel_command[:, 2] - self.robot.data.root_ang_vel_b[:, 2]
+        )
+
+        metrics["base/height_w"] = self.robot.data.root_pos_w[:, 2]
+        metrics["base/height_above_terrain"] = self._compute_base_height_above_terrain()
+        return metrics
+
+    def _log_task_metrics(self):
+        """Publish per-task command and base-height metrics to extras['log']."""
+        per_env_metrics = self._get_per_env_command_metrics()
+        task_masks = {
+            "box_avoidance": self.mask_box,
+            "under_table": self.mask_under_table,
+            "stair_up": self.mask_stair_up,
+            "flat": self.mask_flat,
+        }
+
+        log: dict[str, torch.Tensor] = {}
+        for task_name, mask in task_masks.items():
+            for metric_name, values in per_env_metrics.items():
+                log[f"Metrics/{task_name}/{metric_name}"] = self._masked_mean(values, mask)
+
+        self._cts_moe_task_metrics_log = log
+
     def _log_reward_terms(
         self,
         common_logs: dict[str, torch.Tensor],
@@ -504,7 +561,10 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _publish_task_extras(self):
         self.extras["task_id"] = self.task_id
         self.extras["task_names"] = self.TASK_NAMES
+        if self._cts_moe_enabled:
+            self._log_task_metrics()
         self.extras.setdefault("log", {}).update(self._cts_moe_reward_log)
+        self.extras.setdefault("log", {}).update(self._cts_moe_task_metrics_log)
 
     def _update_reward_buffers(self):
         self.prev_base_pos[:] = self.robot.data.root_pos_w[:, :3]

@@ -156,6 +156,31 @@ def base_ori_tracking(
 
 
 
+def robot_in_table_xy_region(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    table_object_name: str = "table_top",
+    table_half_extents_xy: tuple[float, float] = (0.475, 0.6),
+    min_table_height_w: float = 0.1,
+) -> torch.Tensor:
+    """Return 1.0 when the robot base is inside the active table footprint, else 0.0."""
+    robot: RigidObject = env.scene[asset_cfg.name]
+    table: RigidObject = env.scene[table_object_name]
+
+    robot_xy = robot.data.root_pos_w[:, :2]
+    table_xy = table.data.root_pos_w[:, :2]
+    table_active = table.data.root_pos_w[:, 2] > min_table_height_w
+
+    offset = robot_xy - table_xy
+    half_x, half_y = table_half_extents_xy
+    in_region = (
+        table_active
+        & (torch.abs(offset[:, 0]) <= half_x)
+        & (torch.abs(offset[:, 1]) <= half_y)
+    )
+    return in_region.float()
+
+
 def base_height_tracking(
     env: ManagerBasedRLEnv,
     desired_height: float,
@@ -188,6 +213,34 @@ def base_height_tracking(
     return torch.exp(-height_error / std)
 
 
+def base_height_tracking_in_table_region(
+    env: ManagerBasedRLEnv,
+    desired_height: float,
+    std: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
+    terrain_height_mode: str = "max",
+    table_object_name: str = "table_top",
+    table_half_extents_xy: tuple[float, float] = (0.475, 0.6),
+    min_table_height_w: float = 0.1,
+) -> torch.Tensor:
+    """Track base height above terrain only after the robot enters the table footprint."""
+    reward = base_height_tracking(
+        env,
+        desired_height=desired_height,
+        std=std,
+        asset_cfg=asset_cfg,
+        sensor_cfg=sensor_cfg,
+        terrain_height_mode=terrain_height_mode,
+    )
+    gate = robot_in_table_xy_region(
+        env,
+        asset_cfg=asset_cfg,
+        table_object_name=table_object_name,
+        table_half_extents_xy=table_half_extents_xy,
+        min_table_height_w=min_table_height_w,
+    )
+    return reward * gate
 
 
 def action_rate_l2_arm(env: ManagerBasedRLEnv) -> torch.Tensor:
@@ -726,6 +779,32 @@ def probe_links_below_height_exp(
     max_probe_z = probe_heights.max(dim=1).values
     excess = torch.clamp(max_probe_z - max_height, min=0.0)
     return torch.exp(-excess / std)
+
+
+def probe_links_below_height_exp_in_table_region(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    max_height: float = 0.5,
+    std: float = 0.05,
+    table_object_name: str = "table_top",
+    table_half_extents_xy: tuple[float, float] = (0.475, 0.6),
+    min_table_height_w: float = 0.1,
+) -> torch.Tensor:
+    """Reward probe clearance only after the robot enters the table footprint."""
+    reward = probe_links_below_height_exp(
+        env,
+        asset_cfg=asset_cfg,
+        max_height=max_height,
+        std=std,
+    )
+    gate = robot_in_table_xy_region(
+        env,
+        asset_cfg=SceneEntityCfg("robot"),
+        table_object_name=table_object_name,
+        table_half_extents_xy=table_half_extents_xy,
+        min_table_height_w=min_table_height_w,
+    )
+    return reward * gate
 
 
     """Penalize the linear acceleration of bodies using L2-kernel."""

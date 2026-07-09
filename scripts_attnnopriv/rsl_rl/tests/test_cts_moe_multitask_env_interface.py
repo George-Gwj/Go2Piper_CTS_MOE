@@ -39,9 +39,42 @@ def load_manager_env_class():
 ManagerRLEnv = load_manager_env_class()
 
 
+class FakeCommandTerm:
+    def __init__(self, num_envs: int, device: str):
+        self.metrics = {
+            "position_error": torch.arange(num_envs, device=device, dtype=torch.float32) * 0.01,
+            "orientation_error": torch.arange(num_envs, device=device, dtype=torch.float32) * 0.02,
+        }
+        self.command = torch.stack(
+            [
+                torch.full((num_envs,), 0.5, device=device),
+                torch.zeros(num_envs, device=device),
+                torch.zeros(num_envs, device=device),
+            ],
+            dim=-1,
+        )
+
+
+class FakeCommandManager:
+    def __init__(self, num_envs: int, device: str):
+        self._ee_pose = FakeCommandTerm(num_envs, device)
+        self._base_velocity = FakeCommandTerm(num_envs, device)
+
+    def get_term(self, name: str):
+        if name == "ee_pose":
+            return self._ee_pose
+        if name == "base_velocity":
+            return self._base_velocity
+        raise KeyError(name)
+
+
 class FakeRobot:
     def __init__(self, num_envs: int, device: str):
-        self.data = SimpleNamespace(root_pos_w=torch.zeros(num_envs, 3, device=device))
+        self.data = SimpleNamespace(
+            root_pos_w=torch.arange(num_envs, device=device, dtype=torch.float32).unsqueeze(-1).repeat(1, 3) * 0.01 + 0.3,
+            root_lin_vel_b=torch.zeros(num_envs, 3, device=device),
+            root_ang_vel_b=torch.zeros(num_envs, 3, device=device),
+        )
 
 
 class FakeRewardManager:
@@ -79,6 +112,7 @@ def make_fake_env(
     env.extras = {}
     env._cts_moe_enabled = True
     env._cts_moe_reward_log = {}
+    env._cts_moe_task_metrics_log = {}
     env.cfg = SimpleNamespace(
         multi_task_rewards=SimpleNamespace(
             alive_weight=0.1,
@@ -88,6 +122,7 @@ def make_fake_env(
         )
     )
     env.robot = FakeRobot(num_envs, env.device)
+    env.command_manager = FakeCommandManager(num_envs, env.device)
     env.reward_manager = FakeRewardManager(num_envs, env.device)
     env.step_dt = 0.02
     env.prev_base_pos = torch.zeros(num_envs, 3, device=env.device)
@@ -118,6 +153,8 @@ def test_fixed_task_assignment_and_rewards():
     expected_reward[env.task_id == env.TASK_FLAT] += 4.0
     assert torch.allclose(reward, expected_reward)
 
+    env._publish_task_extras()
+
     required_log_keys = {
         "rew/common/alive",
         "rew/common/tracking",
@@ -134,8 +171,12 @@ def test_fixed_task_assignment_and_rewards():
         "task/num_under_table",
         "task/num_stair_up",
         "task/num_flat",
+        "Metrics/under_table/ee_pose/position_error",
+        "Metrics/under_table/base/height_above_terrain",
+        "Metrics/flat/base_velocity/error_vel_xy",
     }
     assert required_log_keys.issubset(env.extras["log"].keys())
+    assert env.extras["log"]["Metrics/under_table/ee_pose/position_error"] > 0.0
 
 
 def test_fixed_task_id():
