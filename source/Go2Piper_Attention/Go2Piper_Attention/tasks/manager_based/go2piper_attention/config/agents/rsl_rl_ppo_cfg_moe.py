@@ -200,8 +200,8 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
     """Runner config for teacher-only CTS-MoE training."""
 
     num_steps_per_env = 24
-    max_iterations = 15000
-    save_interval = 100
+    max_iterations = 30000
+    save_interval = 200
     experiment_name = "go2piper_cts_moe_teacher"
     empirical_normalization = False
     load_checkpoint: str = "CTSMoE_.*.pt"
