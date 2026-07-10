@@ -62,3 +62,53 @@ def test_orthogonal_moe_actor_shapes_orthogonality_and_backward():
     grads = [param.grad for param in actor.parameters() if param.grad is not None]
     assert grads
     assert all(torch.isfinite(grad).all() for grad in grads)
+
+
+def test_orthogonal_moe_actor_tanh_gate_range_and_backward():
+    torch.manual_seed(1)
+    batch_size = 32
+    latent_dim = 32
+    proprio_dim = 66
+    action_dim = 18
+    num_experts = 4
+    expert_feature_dim = 128
+
+    actor = OrthogonalMoEActor(
+        latent_dim=latent_dim,
+        proprio_dim=proprio_dim,
+        action_dim=action_dim,
+        num_experts=num_experts,
+        expert_feature_dim=expert_feature_dim,
+        expert_hidden_dims=(64,),
+        router_hidden_dims=(32,),
+        action_head_hidden_dims=(64,),
+        orthogonal_mode="gram_schmidt",
+        gate_activation="tanh",
+    )
+    z = torch.randn(batch_size, latent_dim)
+    proprio = torch.randn(batch_size, proprio_dim)
+
+    action_mean, gate_coeffs, _expert_actions, _router_logits, extras = actor(z, proprio)
+
+    assert action_mean.shape == (batch_size, action_dim)
+    assert gate_coeffs.shape == (batch_size, num_experts)
+    assert extras["gate_coeffs"].shape == (batch_size, num_experts)
+    assert torch.all(gate_coeffs <= 1.0 + 1e-6)
+    assert torch.all(gate_coeffs >= -1.0 - 1e-6)
+
+    metrics = compute_orthogonality_metrics(
+        extras["expert_features_orth"],
+        gate_weights=gate_coeffs,
+        gate_activation="tanh",
+    )
+    assert "actor/gate_coeff_global_abs_mean" in metrics
+    assert "actor/gate_positive_ratio_0" in metrics
+    assert "actor/gate_negative_ratio_0" in metrics
+    assert "actor/gate_saturation_ratio_0" in metrics
+    assert "actor/gate_entropy" not in metrics
+
+    loss = action_mean.mean()
+    loss.backward()
+    grads = [param.grad for param in actor.parameters() if param.grad is not None]
+    assert grads
+    assert all(torch.isfinite(grad).all() for grad in grads)

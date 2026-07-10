@@ -105,6 +105,7 @@ def batched_gram_schmidt(U: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
 def compute_orthogonality_metrics(
     V: torch.Tensor,
     gate_weights: torch.Tensor | None = None,
+    gate_activation: str = "softmax",
     eps: float = 1e-6,
 ) -> dict[str, torch.Tensor]:
     """Compute actor-side orthogonality and optional gate usage metrics."""
@@ -129,13 +130,34 @@ def compute_orthogonality_metrics(
     if gate_weights is not None:
         if gate_weights.dim() != 2 or gate_weights.shape[1] != num_experts:
             raise ValueError(f"gate_weights must be [B, {num_experts}], got shape {tuple(gate_weights.shape)}")
-        gate_entropy = -(gate_weights * torch.log(gate_weights + eps)).sum(dim=-1)
-        gate_usage = gate_weights.mean(dim=0)
-        gate_usage_std = gate_weights.std(dim=0, unbiased=False)
-        metrics["actor/gate_entropy"] = gate_entropy.mean()
+        gate_coeffs = gate_weights
+        gate_mean = gate_coeffs.mean(dim=0)
+        gate_std = gate_coeffs.std(dim=0, unbiased=False)
+        gate_abs = gate_coeffs.abs()
+        gate_abs_mean = gate_abs.mean(dim=0)
+        gate_abs_max = gate_abs.max(dim=0).values
+        metrics["actor/gate_coeff_global_abs_mean"] = gate_abs.mean()
+        metrics["actor/gate_coeff_global_abs_max"] = gate_abs.max()
         for expert_idx in range(num_experts):
-            metrics[f"actor/gate_usage_mean_{expert_idx}"] = gate_usage[expert_idx]
-            metrics[f"actor/gate_usage_std_{expert_idx}"] = gate_usage_std[expert_idx]
+            metrics[f"actor/gate_coeff_mean_{expert_idx}"] = gate_mean[expert_idx]
+            metrics[f"actor/gate_coeff_std_{expert_idx}"] = gate_std[expert_idx]
+            metrics[f"actor/gate_coeff_abs_mean_{expert_idx}"] = gate_abs_mean[expert_idx]
+            metrics[f"actor/gate_coeff_abs_max_{expert_idx}"] = gate_abs_max[expert_idx]
+
+        if gate_activation == "softmax":
+            gate_entropy = -(gate_coeffs * torch.log(gate_coeffs + eps)).sum(dim=-1)
+            metrics["actor/gate_entropy"] = gate_entropy.mean()
+            for expert_idx in range(num_experts):
+                metrics[f"actor/gate_usage_mean_{expert_idx}"] = gate_mean[expert_idx]
+                metrics[f"actor/gate_usage_std_{expert_idx}"] = gate_std[expert_idx]
+        elif gate_activation == "tanh":
+            positive_ratio = (gate_coeffs > 0.0).float().mean(dim=0)
+            negative_ratio = (gate_coeffs < 0.0).float().mean(dim=0)
+            saturation_ratio = (gate_abs > 0.95).float().mean(dim=0)
+            for expert_idx in range(num_experts):
+                metrics[f"actor/gate_positive_ratio_{expert_idx}"] = positive_ratio[expert_idx]
+                metrics[f"actor/gate_negative_ratio_{expert_idx}"] = negative_ratio[expert_idx]
+                metrics[f"actor/gate_saturation_ratio_{expert_idx}"] = saturation_ratio[expert_idx]
 
     return metrics
 
@@ -441,6 +463,7 @@ class OrthogonalMoEActor(nn.Module):
         action_head_hidden_dims: Sequence[int] = (128,),
         expert_names: Sequence[str] | None = None,
         orthogonal_mode: str = "gram_schmidt",
+        gate_activation: str = "softmax",
         use_expert_layernorm: bool = True,
         use_moe_output_layernorm: bool = True,
         gram_schmidt_eps: float = 1e-6,
@@ -453,6 +476,8 @@ class OrthogonalMoEActor(nn.Module):
             raise ValueError("expert_feature_dim must be >= num_experts for Gram-Schmidt orthogonalization")
         if orthogonal_mode not in ("none", "gram_schmidt"):
             raise ValueError("orthogonal_mode must be 'none' or 'gram_schmidt'")
+        if gate_activation not in ("softmax", "tanh", "sigmoid", "linear", "l2"):
+            raise ValueError("gate_activation must be 'softmax', 'tanh', 'sigmoid', 'linear', or 'l2'")
 
         self.latent_dim = latent_dim
         self.proprio_dim = proprio_dim
@@ -460,6 +485,7 @@ class OrthogonalMoEActor(nn.Module):
         self.num_experts = num_experts
         self.expert_feature_dim = expert_feature_dim
         self.orthogonal_mode = orthogonal_mode
+        self.gate_activation = gate_activation
         self.gram_schmidt_eps = gram_schmidt_eps
 
         if expert_names is None:
@@ -504,6 +530,19 @@ class OrthogonalMoEActor(nn.Module):
         if z.shape[0] != proprio.shape[0]:
             raise ValueError(f"z and proprio must have the same batch size, got {z.shape[0]} and {proprio.shape[0]}")
 
+    def apply_gate_activation(self, gate_logits: torch.Tensor) -> torch.Tensor:
+        if self.gate_activation == "softmax":
+            return torch.softmax(gate_logits, dim=-1)
+        if self.gate_activation == "tanh":
+            return torch.tanh(gate_logits)
+        if self.gate_activation == "sigmoid":
+            return torch.sigmoid(gate_logits)
+        if self.gate_activation == "linear":
+            return gate_logits
+        if self.gate_activation == "l2":
+            return gate_logits / (gate_logits.norm(dim=-1, keepdim=True) + self.gram_schmidt_eps)
+        raise ValueError(f"Unknown gate_activation: {self.gate_activation}")
+
     def forward(
         self,
         z: torch.Tensor,
@@ -512,7 +551,7 @@ class OrthogonalMoEActor(nn.Module):
         self._check_inputs(z, proprio)
         actor_input = torch.cat([z, proprio], dim=-1)
         router_logits = self.router(z)
-        router_weights = torch.softmax(router_logits, dim=-1)
+        gate_coeffs = self.apply_gate_activation(router_logits)
 
         expert_features_raw = torch.stack(
             [norm(expert(actor_input)) for expert, norm in zip(self.experts, self.expert_norms)],
@@ -525,17 +564,22 @@ class OrthogonalMoEActor(nn.Module):
         else:
             raise ValueError(f"Unsupported orthogonal_mode: {self.orthogonal_mode}")
 
-        mixed_feature = torch.sum(router_weights.unsqueeze(-1) * expert_features_orth, dim=1)
+        mixed_feature = torch.sum(gate_coeffs.unsqueeze(-1) * expert_features_orth, dim=1)
         mixed_feature = self.moe_output_norm(mixed_feature)
         action_mean = self.action_head(mixed_feature)
         expert_actions = self.action_head(self.moe_output_norm(expert_features_orth))
         extras = {
-            "gate_weights": router_weights,
+            "gate_logits": router_logits,
+            "gate_coeffs": gate_coeffs,
+            "gate_weights": gate_coeffs,
+            "gate_activation": self.gate_activation,
             "expert_features_raw": expert_features_raw,
             "expert_features_orth": expert_features_orth,
             "mixed_feature": mixed_feature,
         }
-        return action_mean, router_weights, expert_actions, router_logits, extras
+        # The second return value is kept as router_weights for compatibility;
+        # it may not be a probability distribution when gate_activation != "softmax".
+        return action_mean, gate_coeffs, expert_actions, router_logits, extras
 
 
 class SparseMultiCritic(nn.Module):
@@ -679,6 +723,7 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         action_head_hidden_dims: Sequence[int] = (128,),
         expert_names: Sequence[str] | None = None,
         orthogonal_mode: str = "gram_schmidt",
+        gate_activation: str = "softmax",
         use_expert_layernorm: bool = True,
         use_moe_output_layernorm: bool = True,
         gram_schmidt_eps: float = 1e-6,
@@ -740,6 +785,7 @@ class StructureAwareCTSMoEPolicy(nn.Module):
                 action_head_hidden_dims=action_head_hidden_dims,
                 expert_names=expert_names,
                 orthogonal_mode=orthogonal_mode,
+                gate_activation=gate_activation,
                 use_expert_layernorm=use_expert_layernorm,
                 use_moe_output_layernorm=use_moe_output_layernorm,
                 gram_schmidt_eps=gram_schmidt_eps,

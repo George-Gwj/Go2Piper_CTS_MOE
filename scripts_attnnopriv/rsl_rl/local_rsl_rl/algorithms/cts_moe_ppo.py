@@ -301,7 +301,11 @@ class CTSMoEPPO:
                 task_id_batch,
             )
 
-            router_aux = self._router_auxiliary_loss(out["router_weights"], out["router_logits"])
+            router_aux = self._router_auxiliary_loss(
+                out["router_weights"],
+                out["router_logits"],
+                gate_activation=out.get("gate_activation", getattr(self.policy.moe_actor, "gate_activation", "softmax")),
+            )
             orth_loss = self._orthogonality_loss(out)
 
             ppo_loss = (
@@ -612,11 +616,20 @@ class CTSMoEPPO:
                 stats[f"Router/{task_name}/{expert_name}"] = task_weights[expert_idx].item()
         return stats
 
-    def _router_auxiliary_loss(self, router_weights: torch.Tensor, router_logits: torch.Tensor) -> dict[str, torch.Tensor]:
-        router_entropy = -(router_weights * torch.log(router_weights + 1e-8)).sum(dim=-1).mean()
-        mean_weights = router_weights.mean(dim=0)
-        uniform = torch.full_like(mean_weights, 1.0 / mean_weights.numel())
-        router_balance_loss = (mean_weights - uniform).pow(2).mean()
+    def _router_auxiliary_loss(
+        self,
+        router_weights: torch.Tensor,
+        router_logits: torch.Tensor,
+        gate_activation: str = "softmax",
+    ) -> dict[str, torch.Tensor]:
+        if gate_activation == "softmax":
+            router_entropy = -(router_weights * torch.log(router_weights + 1e-8)).sum(dim=-1).mean()
+            mean_weights = router_weights.mean(dim=0)
+            uniform = torch.full_like(mean_weights, 1.0 / mean_weights.numel())
+            router_balance_loss = (mean_weights - uniform).pow(2).mean()
+        else:
+            router_entropy = router_logits.new_zeros(())
+            router_balance_loss = router_logits.new_zeros(())
         router_logit_l2_loss = router_logits.pow(2).mean()
         loss = (
             -self.router_entropy_coef * router_entropy
@@ -652,5 +665,6 @@ class CTSMoEPPO:
         return compute_orthogonality_metrics(
             features,
             gate_weights=out.get("router_weights"),
+            gate_activation=out.get("gate_activation", getattr(self.policy.moe_actor, "gate_activation", "softmax")),
             eps=1e-6,
         )

@@ -44,13 +44,14 @@ class Go2PiperCTSMoEPolicyCfg:
     # Actor selection. "cts_moe" keeps the original action-level MoE.
     actor_type: str = "orthogonal_cts_moe"
     orthogonal_mode: str = "gram_schmidt"
+    gate_activation: str = "tanh"
 
     # Dense MoE actor. Router uses z only. Orthogonal actor experts output features.
     num_experts: int = 4
     expert_feature_dim: int = 128
     expert_hidden_dims: list[int] = [256, 128]
     router_hidden_dims: list[int] = [128, 64]
-    action_head_hidden_dims: list[int] = [128]
+    action_head_hidden_dims: list[int] = [256, 128]
     expert_names: list[str] = ["lateral_avoidance", "under_table", "stair_up", "flat"]
     use_expert_layernorm: bool = True
     use_moe_output_layernorm: bool = True
@@ -155,6 +156,7 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         student_gru_num_layers=1,
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
+        gate_activation="tanh",
         num_experts=6,
         expert_names=[
             "expert_0",
@@ -167,7 +169,7 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         expert_feature_dim=128,
         expert_hidden_dims=[256, 128],
         router_hidden_dims=[128, 64],
-        action_head_hidden_dims=[128],
+        action_head_hidden_dims=[256, 128],
         use_expert_layernorm=True,
         use_moe_output_layernorm=True,
         gram_schmidt_eps=1e-6,
@@ -198,9 +200,9 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         student_learning_rate=1e-4,
         distillation_loss_coef=1.0,
         student_rollout_ratio=0.15,
-        router_entropy_coef=5e-4,
-        router_balance_coef=2e-3,
-        router_logit_l2_coef=1e-5,
+        router_entropy_coef=0.0,
+        router_balance_coef=0.0,
+        router_logit_l2_coef=0.0,
         lambda_orth=0.0,
         orth_loss_on="raw",
         per_task_advantage_normalization=True,
@@ -257,6 +259,7 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
         student_gru_num_layers=1,
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
+        gate_activation="tanh",
         num_experts=6,
         expert_feature_dim=128,
         expert_names=[
@@ -300,9 +303,9 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
         student_learning_rate=1e-4,
         distillation_loss_coef=0.0,
         student_rollout_ratio=0.0,
-        router_entropy_coef=1e-4, # TODO 5e-4
-        router_balance_coef=2e-4, # TODO 2e-3
-        router_logit_l2_coef=1e-5,
+        router_entropy_coef=0.0, # TODO 5e-4
+        router_balance_coef=0.0, # TODO 2e-3
+        router_logit_l2_coef=0.0,
         lambda_orth=0.0,
         orth_loss_on="raw",
         per_task_advantage_normalization=True,
