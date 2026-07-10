@@ -7,6 +7,7 @@ import torch.optim as optim
 
 from local_rsl_rl.storage import CTSMoERolloutStorage
 from local_rsl_rl.utils import PerTaskPopArt
+from local_rsl_rl.modules import compute_orthogonality_metrics
 
 
 class CTSMoEPPO:
@@ -43,6 +44,8 @@ class CTSMoEPPO:
         router_entropy_coef: float = 0.0,
         router_balance_coef: float = 0.0,
         router_logit_l2_coef: float = 0.0,
+        lambda_orth: float = 0.0,
+        orth_loss_on: str = "raw",
         per_task_advantage_normalization: bool = True,
         use_popart: bool = False,
         popart_beta: float = 0.99999,
@@ -87,6 +90,10 @@ class CTSMoEPPO:
         self.router_entropy_coef = router_entropy_coef
         self.router_balance_coef = router_balance_coef
         self.router_logit_l2_coef = router_logit_l2_coef
+        self.lambda_orth = lambda_orth
+        if orth_loss_on not in ("raw", "orth"):
+            raise ValueError("orth_loss_on must be 'raw' or 'orth'")
+        self.orth_loss_on = orth_loss_on
         self.per_task_advantage_normalization = per_task_advantage_normalization
         self.use_popart = use_popart
         self.popart_use_output_rescale = popart_use_output_rescale
@@ -228,6 +235,9 @@ class CTSMoEPPO:
         mean_router_entropy = 0.0
         mean_router_balance_loss = 0.0
         mean_router_logit_l2_loss = 0.0
+        mean_orth_loss = 0.0
+        orth_metric_sums: dict[str, float] = {}
+        num_orth_metric_updates = 0
         mean_returns_norm_mean = 0.0
         mean_returns_norm_std = 0.0
 
@@ -292,12 +302,14 @@ class CTSMoEPPO:
             )
 
             router_aux = self._router_auxiliary_loss(out["router_weights"], out["router_logits"])
+            orth_loss = self._orthogonality_loss(out)
 
             ppo_loss = (
                 surrogate_loss
                 + self.value_loss_coef * value_loss
                 - self.entropy_coef * entropy_batch.mean()
                 + router_aux["loss"]
+                + self.lambda_orth * orth_loss
             )
 
             self.optimizer.zero_grad()
@@ -311,6 +323,12 @@ class CTSMoEPPO:
             mean_router_entropy += router_aux["entropy"].item()
             mean_router_balance_loss += router_aux["balance"].item()
             mean_router_logit_l2_loss += router_aux["logit_l2"].item()
+            mean_orth_loss += orth_loss.item()
+            batch_orth_metrics = self._orthogonality_metrics(out)
+            if batch_orth_metrics:
+                for key, value in batch_orth_metrics.items():
+                    orth_metric_sums[key] = orth_metric_sums.get(key, 0.0) + value.item()
+                num_orth_metric_updates += 1
             mean_returns_norm_mean += returns_norm_stats["mean"].item()
             mean_returns_norm_std += returns_norm_stats["std"].item()
 
@@ -369,8 +387,13 @@ class CTSMoEPPO:
             "router_entropy": mean_router_entropy / num_updates,
             "router_balance": mean_router_balance_loss / num_updates,
             "router_logit_l2": mean_router_logit_l2_loss / num_updates,
+            "orth_loss": mean_orth_loss / num_updates,
             "student_rollout_ratio": self.storage.student_masks.float().mean().item(),
         }
+        if num_orth_metric_updates > 0:
+            loss_dict.update(
+                {key: value / num_orth_metric_updates for key, value in orth_metric_sums.items()}
+            )
         loss_dict.update(self._compute_per_task_router_weight_stats())
         if self.use_popart:
             loss_dict.update(
@@ -606,3 +629,28 @@ class CTSMoEPPO:
             "balance": router_balance_loss.detach(),
             "logit_l2": router_logit_l2_loss.detach(),
         }
+
+    def _orthogonality_loss(self, out: dict) -> torch.Tensor:
+        """Optional actor orthogonality loss for representation-level MoE ablations."""
+        reference = out.get("expert_features_raw" if self.orth_loss_on == "raw" else "expert_features_orth")
+        if reference is None or self.lambda_orth == 0.0:
+            return out["action_mean"].new_zeros(())
+
+        features = F.normalize(reference, dim=-1, eps=1e-6)
+        gram = torch.matmul(features, features.transpose(-1, -2))
+        num_experts = gram.shape[-1]
+        eye = torch.eye(num_experts, device=gram.device, dtype=gram.dtype).unsqueeze(0)
+        off_diag = gram - eye
+        return off_diag.pow(2).mean()
+
+    def _orthogonality_metrics(self, out: dict) -> dict[str, torch.Tensor]:
+        if not getattr(self.policy, "log_expert_metrics", False):
+            return {}
+        features = out.get("expert_features_orth")
+        if features is None:
+            return {}
+        return compute_orthogonality_metrics(
+            features,
+            gate_weights=out.get("router_weights"),
+            eps=1e-6,
+        )

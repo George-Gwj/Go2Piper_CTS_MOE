@@ -210,7 +210,7 @@ class OnPolicyRunner:
         fps = int(collection_size / max(iteration_time, 1e-6))
 
         for key, value in loss_dict.items():
-            if key.startswith("Router/"):
+            if key.startswith("Router/") or key.startswith("actor/"):
                 self.writer.add_scalar(key, value, it)
             else:
                 self.writer.add_scalar(f"Loss/{key}", value, it)

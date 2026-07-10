@@ -78,6 +78,68 @@ def build_lazy_mlp(
     return nn.Sequential(*layers)
 
 
+def batched_gram_schmidt(U: torch.Tensor, eps: float = 1e-6) -> torch.Tensor:
+    """Differentiable batched Gram-Schmidt orthogonalization.
+
+    Args:
+        U: Expert feature tensor with shape [B, K, D].
+        eps: Numerical stabilizer for projection and normalization.
+
+    Returns:
+        Orthogonalized and L2-normalized features with shape [B, K, D].
+    """
+    if U.dim() != 3:
+        raise ValueError(f"U must be [B, K, D], got shape {tuple(U.shape)}")
+
+    vectors = []
+    for i in range(U.shape[1]):
+        v = U[:, i, :]
+        for prev in vectors:
+            proj_coeff = (v * prev).sum(dim=-1, keepdim=True) / ((prev * prev).sum(dim=-1, keepdim=True) + eps)
+            v = v - proj_coeff * prev
+        v = v / (v.norm(dim=-1, keepdim=True) + eps)
+        vectors.append(v)
+    return torch.stack(vectors, dim=1)
+
+
+def compute_orthogonality_metrics(
+    V: torch.Tensor,
+    gate_weights: torch.Tensor | None = None,
+    eps: float = 1e-6,
+) -> dict[str, torch.Tensor]:
+    """Compute actor-side orthogonality and optional gate usage metrics."""
+    if V.dim() != 3:
+        raise ValueError(f"V must be [B, K, D], got shape {tuple(V.shape)}")
+
+    num_experts = V.shape[1]
+    V_norm = F.normalize(V, dim=-1, eps=eps)
+    gram = torch.matmul(V_norm, V_norm.transpose(-1, -2))
+    eye = torch.eye(num_experts, device=V.device, dtype=V.dtype).unsqueeze(0)
+    off_diag_mask = ~torch.eye(num_experts, device=V.device, dtype=torch.bool)
+    off_diag_abs = (gram - eye).abs()[:, off_diag_mask]
+    diag = gram.diagonal(dim1=-2, dim2=-1)
+
+    metrics = {
+        "actor/orth_offdiag_mean_abs": off_diag_abs.mean(),
+        "actor/orth_offdiag_max_abs": off_diag_abs.max(),
+        "actor/orth_diag_mean": diag.mean(),
+        "actor/orth_diag_std": diag.std(unbiased=False),
+    }
+
+    if gate_weights is not None:
+        if gate_weights.dim() != 2 or gate_weights.shape[1] != num_experts:
+            raise ValueError(f"gate_weights must be [B, {num_experts}], got shape {tuple(gate_weights.shape)}")
+        gate_entropy = -(gate_weights * torch.log(gate_weights + eps)).sum(dim=-1)
+        gate_usage = gate_weights.mean(dim=0)
+        gate_usage_std = gate_weights.std(dim=0, unbiased=False)
+        metrics["actor/gate_entropy"] = gate_entropy.mean()
+        for expert_idx in range(num_experts):
+            metrics[f"actor/gate_usage_mean_{expert_idx}"] = gate_usage[expert_idx]
+            metrics[f"actor/gate_usage_std_{expert_idx}"] = gate_usage_std[expert_idx]
+
+    return metrics
+
+
 class GridEncoder(nn.Module):
     """Small CNN for height maps, occupancy grids, depth maps, or LiDAR grids."""
 
@@ -362,6 +424,120 @@ class MoEActor(nn.Module):
         return action_mean, router_weights, expert_actions, router_logits
 
 
+class OrthogonalMoEActor(nn.Module):
+    """Representation-level CTS-MoE actor with optional Gram-Schmidt features."""
+
+    DEFAULT_EXPERT_NAMES = MoEActor.DEFAULT_EXPERT_NAMES
+
+    def __init__(
+        self,
+        latent_dim: int,
+        proprio_dim: int,
+        action_dim: int,
+        num_experts: int = 4,
+        expert_feature_dim: int = 128,
+        expert_hidden_dims: Sequence[int] = (256, 128),
+        router_hidden_dims: Sequence[int] = (128, 64),
+        action_head_hidden_dims: Sequence[int] = (128,),
+        expert_names: Sequence[str] | None = None,
+        orthogonal_mode: str = "gram_schmidt",
+        use_expert_layernorm: bool = True,
+        use_moe_output_layernorm: bool = True,
+        gram_schmidt_eps: float = 1e-6,
+        activation: str | type[nn.Module] | nn.Module = "elu",
+    ):
+        super().__init__()
+        if num_experts < 1:
+            raise ValueError("num_experts must be positive")
+        if expert_feature_dim < num_experts and orthogonal_mode == "gram_schmidt":
+            raise ValueError("expert_feature_dim must be >= num_experts for Gram-Schmidt orthogonalization")
+        if orthogonal_mode not in ("none", "gram_schmidt"):
+            raise ValueError("orthogonal_mode must be 'none' or 'gram_schmidt'")
+
+        self.latent_dim = latent_dim
+        self.proprio_dim = proprio_dim
+        self.action_dim = action_dim
+        self.num_experts = num_experts
+        self.expert_feature_dim = expert_feature_dim
+        self.orthogonal_mode = orthogonal_mode
+        self.gram_schmidt_eps = gram_schmidt_eps
+
+        if expert_names is None:
+            expert_names = self.DEFAULT_EXPERT_NAMES[:num_experts]
+        if len(expert_names) != num_experts:
+            raise ValueError("expert_names length must match num_experts")
+        self.expert_names = tuple(expert_names)
+
+        input_dim = latent_dim + proprio_dim
+        self.experts = nn.ModuleList(
+            build_mlp(
+                input_dim,
+                hidden_dims=expert_hidden_dims,
+                output_dim=expert_feature_dim,
+                activation=activation,
+            )
+            for _ in range(num_experts)
+        )
+        self.expert_norms = nn.ModuleList(
+            nn.LayerNorm(expert_feature_dim) if use_expert_layernorm else nn.Identity()
+            for _ in range(num_experts)
+        )
+        self.router = build_mlp(
+            latent_dim,
+            hidden_dims=router_hidden_dims,
+            output_dim=num_experts,
+            activation=activation,
+        )
+        self.moe_output_norm = nn.LayerNorm(expert_feature_dim) if use_moe_output_layernorm else nn.Identity()
+        self.action_head = build_mlp(
+            expert_feature_dim,
+            hidden_dims=action_head_hidden_dims,
+            output_dim=action_dim,
+            activation=activation,
+        )
+
+    def _check_inputs(self, z: torch.Tensor, proprio: torch.Tensor) -> None:
+        if z.dim() != 2 or z.shape[-1] != self.latent_dim:
+            raise ValueError(f"z must be [B, {self.latent_dim}], got {tuple(z.shape)}")
+        if proprio.dim() != 2 or proprio.shape[-1] != self.proprio_dim:
+            raise ValueError(f"proprio must be [B, {self.proprio_dim}], got {tuple(proprio.shape)}")
+        if z.shape[0] != proprio.shape[0]:
+            raise ValueError(f"z and proprio must have the same batch size, got {z.shape[0]} and {proprio.shape[0]}")
+
+    def forward(
+        self,
+        z: torch.Tensor,
+        proprio: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
+        self._check_inputs(z, proprio)
+        actor_input = torch.cat([z, proprio], dim=-1)
+        router_logits = self.router(z)
+        router_weights = torch.softmax(router_logits, dim=-1)
+
+        expert_features_raw = torch.stack(
+            [norm(expert(actor_input)) for expert, norm in zip(self.experts, self.expert_norms)],
+            dim=1,
+        )
+        if self.orthogonal_mode == "gram_schmidt":
+            expert_features_orth = batched_gram_schmidt(expert_features_raw, eps=self.gram_schmidt_eps)
+        elif self.orthogonal_mode == "none":
+            expert_features_orth = expert_features_raw
+        else:
+            raise ValueError(f"Unsupported orthogonal_mode: {self.orthogonal_mode}")
+
+        mixed_feature = torch.sum(router_weights.unsqueeze(-1) * expert_features_orth, dim=1)
+        mixed_feature = self.moe_output_norm(mixed_feature)
+        action_mean = self.action_head(mixed_feature)
+        expert_actions = self.action_head(self.moe_output_norm(expert_features_orth))
+        extras = {
+            "gate_weights": router_weights,
+            "expert_features_raw": expert_features_raw,
+            "expert_features_orth": expert_features_orth,
+            "mixed_feature": mixed_feature,
+        }
+        return action_mean, router_weights, expert_actions, router_logits, extras
+
+
 class SparseMultiCritic(nn.Module):
     """Sparse task-conditioned critic with one value head per task."""
 
@@ -494,11 +670,19 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         student_depth_filters: Sequence[int] = (16, 32, 64),
         student_gru_hidden_dim: int = 256,
         student_gru_num_layers: int = 1,
+        actor_type: str = "cts_moe",
         num_experts: int = 4,
         num_tasks: int = 4,
+        expert_feature_dim: int = 128,
         expert_hidden_dims: Sequence[int] = (256, 128),
         router_hidden_dims: Sequence[int] = (128, 64),
+        action_head_hidden_dims: Sequence[int] = (128,),
         expert_names: Sequence[str] | None = None,
+        orthogonal_mode: str = "gram_schmidt",
+        use_expert_layernorm: bool = True,
+        use_moe_output_layernorm: bool = True,
+        gram_schmidt_eps: float = 1e-6,
+        log_expert_metrics: bool = True,
         critic_hidden_dims: Sequence[int] = (256, 128),
         critic_shared_trunk: bool = False,
         critic_trunk_hidden_dims: Sequence[int] | None = None,
@@ -511,6 +695,10 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         super().__init__()
         self.action_dim = action_dim
         self.latent_dim = latent_dim
+        if actor_type not in ("cts_moe", "orthogonal_cts_moe"):
+            raise ValueError("actor_type must be 'cts_moe' or 'orthogonal_cts_moe'")
+        self.actor_type = actor_type
+        self.log_expert_metrics = log_expert_metrics
 
         self.teacher_encoder = TeacherEncoder(
             privileged_dim=privileged_dim,
@@ -540,16 +728,34 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             gru_num_layers=student_gru_num_layers,
             activation=activation,
         )
-        self.moe_actor = MoEActor(
-            latent_dim=latent_dim,
-            proprio_dim=proprio_dim,
-            action_dim=action_dim,
-            num_experts=num_experts,
-            expert_hidden_dims=expert_hidden_dims,
-            router_hidden_dims=router_hidden_dims,
-            expert_names=expert_names,
-            activation=activation,
-        )
+        if actor_type == "orthogonal_cts_moe":
+            self.moe_actor = OrthogonalMoEActor(
+                latent_dim=latent_dim,
+                proprio_dim=proprio_dim,
+                action_dim=action_dim,
+                num_experts=num_experts,
+                expert_feature_dim=expert_feature_dim,
+                expert_hidden_dims=expert_hidden_dims,
+                router_hidden_dims=router_hidden_dims,
+                action_head_hidden_dims=action_head_hidden_dims,
+                expert_names=expert_names,
+                orthogonal_mode=orthogonal_mode,
+                use_expert_layernorm=use_expert_layernorm,
+                use_moe_output_layernorm=use_moe_output_layernorm,
+                gram_schmidt_eps=gram_schmidt_eps,
+                activation=activation,
+            )
+        else:
+            self.moe_actor = MoEActor(
+                latent_dim=latent_dim,
+                proprio_dim=proprio_dim,
+                action_dim=action_dim,
+                num_experts=num_experts,
+                expert_hidden_dims=expert_hidden_dims,
+                router_hidden_dims=router_hidden_dims,
+                expert_names=expert_names,
+                activation=activation,
+            )
         self.multi_critic = SparseMultiCritic(
             latent_dim=latent_dim,
             proprio_dim=proprio_dim,
@@ -713,7 +919,12 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         else:
             raise ValueError("mode must be 'teacher', 'student', or 'mixed'")
 
-        action_mean, router_weights, expert_actions, router_logits = self.moe_actor(z, proprio)
+        actor_output = self.moe_actor(z, proprio)
+        actor_extras = {}
+        if len(actor_output) == 5:
+            action_mean, router_weights, expert_actions, router_logits, actor_extras = actor_output
+        else:
+            action_mean, router_weights, expert_actions, router_logits = actor_output
         action_std = self.action_std.expand_as(action_mean)
         output = {
             "z": z,
@@ -724,6 +935,7 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             "expert_actions": expert_actions,
             "router_logits": router_logits,
         }
+        output.update(actor_extras)
         if z_teacher is not None:
             output["z_teacher"] = z_teacher
             output["teacher_task_id"] = teacher_task_id

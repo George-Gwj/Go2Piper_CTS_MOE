@@ -9,9 +9,11 @@ from .actor_critic import ActorCritic
 from .normalizer import EmpiricalNormalization
 from .structure_aware_cts_moe import (
     MoEActor,
+    OrthogonalMoEActor,
     SparseMultiCritic,
     StructureAwareCTSMoEPolicy,
     StudentEncoder,
     TeacherEncoder,
+    batched_gram_schmidt,
+    compute_orthogonality_metrics,
 )
-
