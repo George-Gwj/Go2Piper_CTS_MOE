@@ -127,6 +127,7 @@ class CTSMoEPPO:
             proprio_history_shape,
             perception_shape,
             actions_shape,
+            self.policy.moe_actor.num_experts,
             self.device,
         )
 
@@ -170,6 +171,7 @@ class CTSMoEPPO:
         self.transition.actions_log_prob = actions_log_prob.detach()
         self.transition.action_mean = out["action_mean"].detach()
         self.transition.action_sigma = out["action_std"].detach()
+        self.transition.router_weights = out["router_weights"].detach()
         return actions.detach()
 
     def process_env_step(self, rewards: torch.Tensor, dones: torch.Tensor, infos: dict):
@@ -369,6 +371,7 @@ class CTSMoEPPO:
             "router_logit_l2": mean_router_logit_l2_loss / num_updates,
             "student_rollout_ratio": self.storage.student_masks.float().mean().item(),
         }
+        loss_dict.update(self._compute_per_task_router_weight_stats())
         if self.use_popart:
             loss_dict.update(
                 {
@@ -568,6 +571,23 @@ class CTSMoEPPO:
         if last_linear is None:
             raise NotImplementedError("POPArt output rescale requires each value head to contain an nn.Linear")
         return last_linear
+
+    def _compute_per_task_router_weight_stats(self) -> dict[str, float]:
+        """Average MoE router weights per task and expert over the collected rollout."""
+        flat_weights = self.storage.router_weights.flatten(0, 1)
+        flat_task_ids = self.storage.task_ids.flatten(0, 1)
+        task_names = self.policy.multi_critic.TASK_NAMES[: self.policy.multi_critic.num_tasks]
+        expert_names = self.policy.moe_actor.expert_names
+
+        stats: dict[str, float] = {}
+        for task_id, task_name in enumerate(task_names):
+            mask = flat_task_ids == task_id
+            if not mask.any():
+                continue
+            task_weights = flat_weights[mask].mean(dim=0)
+            for expert_idx, expert_name in enumerate(expert_names):
+                stats[f"Router/{task_name}/{expert_name}"] = task_weights[expert_idx].item()
+        return stats
 
     def _router_auxiliary_loss(self, router_weights: torch.Tensor, router_logits: torch.Tensor) -> dict[str, torch.Tensor]:
         router_entropy = -(router_weights * torch.log(router_weights + 1e-8)).sum(dim=-1).mean()

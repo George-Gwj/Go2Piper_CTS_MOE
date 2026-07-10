@@ -28,6 +28,55 @@ parser.add_argument(
 )
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
+parser.add_argument(
+    "--print_router_interval",
+    type=int,
+    default=24,
+    help="Print MoE router weights every N play steps. Set 0 to disable.",
+)
+parser.add_argument(
+    "--routing",
+    type=str,
+    default="soft",
+    choices=("soft", "one_hot"),
+    help="MoE routing at play time: learned soft mixture or task-id one-hot expert selection.",
+)
+parser.add_argument(
+    "--plot_router_weights",
+    action="store_true",
+    default=True,
+    help="Record per-task MoE router weight curves during play.",
+)
+parser.add_argument(
+    "--no_plot_router_weights",
+    action="store_false",
+    dest="plot_router_weights",
+    help="Disable per-task MoE router weight curve recording.",
+)
+parser.add_argument(
+    "--plot_router_interval",
+    type=int,
+    default=1,
+    help="Sample router weights every N play steps for curve plotting.",
+)
+parser.add_argument(
+    "--plot_router_output_dir",
+    type=str,
+    default=None,
+    help="Directory to save router weight plots/csv. Defaults to <checkpoint_dir>/play_router_plots.",
+)
+parser.add_argument(
+    "--live_plot_router",
+    action="store_true",
+    default=True,
+    help="Show a live matplotlib window with per-task MoE router weight curves during play.",
+)
+parser.add_argument(
+    "--no_live_plot_router",
+    action="store_false",
+    dest="live_plot_router",
+    help="Disable live router weight plotting; only save curves when play exits.",
+)
 cli_args.add_rsl_rl_args(parser)
 AppLauncher.add_app_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
@@ -44,6 +93,7 @@ import os
 import torch
 
 from local_rsl_rl.runners import OnPolicyRunner
+from local_rsl_rl.utils.play_router_plotter import PlayRouterWeightLogger
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -109,6 +159,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     log_dir = os.path.dirname(resume_path)
     print(f"[INFO]: Loading CTS-MoE checkpoint from: {resume_path}")
     print(f"[INFO]: Using inference_mode={inference_mode}")
+    print(f"[INFO]: Using routing_mode={args_cli.routing}")
 
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
     if isinstance(env.unwrapped, DirectMARLEnv):
@@ -129,7 +180,36 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
     runner.load(resume_path, load_optimizer=False)
-    policy = runner.get_inference_policy(device=agent_cfg.device, inference_mode=inference_mode)
+    task_names = getattr(env.unwrapped, "TASK_NAMES", runner.alg.policy.multi_critic.TASK_NAMES)
+    expert_names = runner.alg.policy.moe_actor.expert_names
+    if args_cli.print_router_interval > 0:
+        print(f"[INFO] Printing MoE router weights every {args_cli.print_router_interval} steps.")
+
+    plot_output_dir = (
+        args_cli.plot_router_output_dir
+        if args_cli.plot_router_output_dir is not None
+        else os.path.join(log_dir, "play_router_plots")
+    )
+    router_plot_logger = None
+    if args_cli.plot_router_weights:
+        router_plot_logger = PlayRouterWeightLogger(
+            task_names=task_names,
+            expert_names=expert_names,
+            output_dir=plot_output_dir,
+            sample_interval=args_cli.plot_router_interval,
+            live_plot=args_cli.live_plot_router,
+            routing_mode=args_cli.routing,
+            inference_mode=inference_mode,
+        )
+        if args_cli.live_plot_router:
+            print(
+                f"[INFO] Live router weight plot enabled "
+                f"(refresh every {args_cli.plot_router_interval} steps)."
+            )
+        print(
+            f"[INFO] Recording per-task router weight curves every "
+            f"{args_cli.plot_router_interval} steps to: {plot_output_dir}"
+        )
 
     dt = env.unwrapped.step_dt
     obs, _ = env.reset()
@@ -139,20 +219,51 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     while simulation_app.is_running():
         start_time = time.time()
         with torch.inference_mode():
-            actions = policy(obs).to(env.device)
+            task_ids = obs["task_id"]
+            actions, router_weights = runner.infer_step(
+                obs,
+                inference_mode=inference_mode,
+                routing_mode=args_cli.routing,
+            )
+            actions = actions.to(env.device)
             obs, _, _, _ = env.step_cts_moe(actions)
             obs = {key: value.to(agent_cfg.device) for key, value in obs.items()}
+
+            if args_cli.print_router_interval > 0 and timestep % args_cli.print_router_interval == 0:
+                router_entries = OnPolicyRunner.aggregate_router_weights_by_task(
+                    router_weights,
+                    task_ids,
+                    task_names,
+                    expert_names,
+                )
+                print(f"[play step {timestep}] routing={args_cli.routing}")
+                print(OnPolicyRunner.format_router_weight_table(router_entries))
+
+            if router_plot_logger is not None:
+                router_plot_logger.maybe_record(timestep, router_weights, task_ids)
 
         if args_cli.video:
             timestep += 1
             if timestep == args_cli.video_length:
                 break
+        else:
+            timestep += 1
 
         sleep_time = dt - (time.time() - start_time)
         if args_cli.real_time and sleep_time > 0:
             time.sleep(sleep_time)
 
     env.close()
+
+    if router_plot_logger is not None:
+        router_plot_logger.close()
+        saved_paths = router_plot_logger.save()
+        if saved_paths:
+            print("[INFO] Saved MoE router weight curves:")
+            for path in saved_paths:
+                print(f"  - {path}")
+        else:
+            print("[WARN] No router weight data was recorded for plotting.")
 
 
 if __name__ == "__main__":

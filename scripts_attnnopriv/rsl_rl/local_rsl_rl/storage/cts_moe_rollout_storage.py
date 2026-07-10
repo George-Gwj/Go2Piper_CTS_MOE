@@ -27,6 +27,7 @@ class CTSMoERolloutStorage:
             self.actions_log_prob = None
             self.action_mean = None
             self.action_sigma = None
+            self.router_weights = None
 
         def clear(self):
             self.__init__()
@@ -41,6 +42,7 @@ class CTSMoERolloutStorage:
         proprio_history_shape: tuple[int, ...] | list[int],
         perception_shape: tuple[int, ...] | list[int],
         actions_shape: tuple[int, ...] | list[int],
+        num_experts: int,
         device: str = "cpu",
     ):
         self.device = device
@@ -65,6 +67,7 @@ class CTSMoERolloutStorage:
         self.actions_log_prob = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
         self.mu = torch.zeros(num_transitions_per_env, num_envs, *actions_shape, device=device)
         self.sigma = torch.zeros(num_transitions_per_env, num_envs, *actions_shape, device=device)
+        self.router_weights = torch.zeros(num_transitions_per_env, num_envs, num_experts, device=device)
 
     def add_transitions(self, transition: Transition):
         if self.step >= self.num_transitions_per_env:
@@ -85,6 +88,7 @@ class CTSMoERolloutStorage:
         self.actions_log_prob[self.step].copy_(transition.actions_log_prob.view(-1, 1))
         self.mu[self.step].copy_(transition.action_mean)
         self.sigma[self.step].copy_(transition.action_sigma)
+        self.router_weights[self.step].copy_(transition.router_weights)
         self.step += 1
 
     def clear(self):

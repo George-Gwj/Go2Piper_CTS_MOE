@@ -160,7 +160,7 @@ def robot_in_table_xy_region(
     env: ManagerBasedRLEnv,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     table_object_name: str = "table_top",
-    table_half_extents_xy: tuple[float, float] = (0.475, 0.6),
+    table_half_extents_xy: tuple[float, float] = (1.0, 0.7),
     min_table_height_w: float = 0.1,
 ) -> torch.Tensor:
     """Return 1.0 when the robot base is inside the active table footprint, else 0.0."""
@@ -221,7 +221,7 @@ def base_height_tracking_in_table_region(
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
     terrain_height_mode: str = "max",
     table_object_name: str = "table_top",
-    table_half_extents_xy: tuple[float, float] = (0.475, 0.6),
+    table_half_extents_xy: tuple[float, float] = (1.0, 0.7),
     min_table_height_w: float = 0.1,
 ) -> torch.Tensor:
     """Track base height above terrain only after the robot enters the table footprint."""
@@ -787,7 +787,7 @@ def probe_links_below_height_exp_in_table_region(
     max_height: float = 0.5,
     std: float = 0.05,
     table_object_name: str = "table_top",
-    table_half_extents_xy: tuple[float, float] = (0.475, 0.6),
+    table_half_extents_xy: tuple[float, float] = (1.0, 0.7),
     min_table_height_w: float = 0.1,
 ) -> torch.Tensor:
     """Reward probe clearance only after the robot enters the table footprint."""

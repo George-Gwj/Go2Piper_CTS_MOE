@@ -65,6 +65,7 @@ def _run_rollout_and_update(alg: CTSMoEPPO, obs: dict[str, torch.Tensor]) -> dic
         list(obs["proprio_history"].shape[1:]),
         list(obs["perception"].shape[1:]),
         [4],
+        alg.policy.moe_actor.num_experts,
     )
 
     for _ in range(2):
@@ -96,6 +97,7 @@ def test_teacher_mode_skips_student_rollout_and_distillation():
     assert alg.training_mode == "teacher"
     assert loss_dict["distillation"] == 0.0
     assert loss_dict["student_rollout_ratio"] == 0.0
+    assert any(key.startswith("Router/") for key in loss_dict)
 
 
 def test_mixed_mode_runs_distillation_when_student_mask_present():

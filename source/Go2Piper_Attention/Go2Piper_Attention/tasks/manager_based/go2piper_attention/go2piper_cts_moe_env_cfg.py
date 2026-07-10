@@ -240,7 +240,7 @@ class MySceneCfg(InteractiveSceneCfg):
     table_top = RigidObjectCfg(
         prim_path="{ENV_REGEX_NS}/table_top",
         spawn=sim_utils.MeshCuboidCfg(
-            size=(0.95, 1.2, 0.08),
+            size=(2.0, 1.4, 0.08),
             rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
             collision_props=sim_utils.CollisionPropertiesCfg(
                 collision_enabled=False,
@@ -735,8 +735,8 @@ class RewardsCfg:
 
     end_effector_orientation_tracking_common = RewTerm(
         func=mdp.orientation_command_error,
-        weight=-1.5,
-        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"), 
+        weight=0.0,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
                 "command_name": "ee_pose"},
     )
 
@@ -844,7 +844,7 @@ class RewardsCfg:
         params={
             "desired_height": 0.24,
             "std": 0.02,
-            "table_half_extents_xy": (0.475 + 0.2, 0.6),
+            "table_half_extents_xy": (1.0, 0.7),
         },
     )
 
@@ -1060,7 +1060,7 @@ class RewardsCfg:
             "asset_cfg": SceneEntityCfg("robot", body_names=["probe0", "probe1", "probe2"]),
             "max_height": 0.5,
             "std": 0.05,
-            "table_half_extents_xy": (0.475 + 0.2, 0.6),
+            "table_half_extents_xy": (1.0, 0.7),
         },
     )
 
@@ -1251,7 +1251,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 4
-        self.episode_length_s = 12.0
+        self.episode_length_s = 8.0
         # simulation settings
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation

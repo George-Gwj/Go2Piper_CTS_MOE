@@ -300,10 +300,10 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _randomize_under_table_scene(self, env_ids: torch.Tensor):
         if env_ids.numel() == 0:
             return
-        table_depth_x = 0.95
-        table_span_y = 1.2
+        table_depth_x = 2.0
+        table_span_y = 1.4
         table_height = 0.6
-        table_x = torch.empty(env_ids.numel(), device=self.device).uniform_(1.85, 2.15)
+        table_x = torch.empty(env_ids.numel(), device=self.device).uniform_(2.2, 2.6)
         table_y = torch.empty(env_ids.numel(), device=self.device).uniform_(-0.10, 0.10)
         self._set_obstacle_poses(
             "table_top",

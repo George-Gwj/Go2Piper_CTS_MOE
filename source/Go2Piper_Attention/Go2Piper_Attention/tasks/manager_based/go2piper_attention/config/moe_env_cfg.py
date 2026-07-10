@@ -82,7 +82,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.end_effector_position_tracking_exp_common.weight = 4.0
         self.rewards.end_effector_position_tracking_l2_common.weight = -0.0
         self.rewards.end_effector_position_tracking_fine_grained_common.weight = 2.0
-        self.rewards.end_effector_orientation_tracking_common.weight = -3.0
+        self.rewards.end_effector_orientation_tracking_common.weight = 0.0
         self.rewards.end_effector_action_rate_common.weight = -0.005 #-0.005 
         self.rewards.end_effector_action_smoothness_common.weight = -0.02#-0.02
         self.rewards.end_effector_joint_vel_common.weight = -0.001 # -0.0001
@@ -206,7 +206,7 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         self.commands.base_velocity.rel_standing_envs = 0.1
         
         # final
-        self.commands.base_velocity.ranges.lin_vel_x = (-0.0, 0.8)
+        self.commands.base_velocity.ranges.lin_vel_x = (0.3, 0.8)
         self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
         self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
        

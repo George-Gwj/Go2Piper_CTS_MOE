@@ -225,7 +225,7 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
         student_depth_feature_dim=128,
         student_gru_hidden_dim=256,
         student_gru_num_layers=1,
-        num_experts=4,
+        num_experts=6,
         expert_hidden_dims=[256, 128],
         router_hidden_dims=[128, 64],
         critic_hidden_dims=[256, 128],
@@ -254,8 +254,8 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
         student_learning_rate=1e-4,
         distillation_loss_coef=0.0,
         student_rollout_ratio=0.0,
-        router_entropy_coef=5e-4,
-        router_balance_coef=2e-3,
+        router_entropy_coef=1e-4, # TODO 5e-4
+        router_balance_coef=2e-4, # TODO 2e-3
         router_logit_l2_coef=1e-5,
         per_task_advantage_normalization=True,
         use_popart=True,

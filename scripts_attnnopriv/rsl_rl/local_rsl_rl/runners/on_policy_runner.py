@@ -210,7 +210,10 @@ class OnPolicyRunner:
         fps = int(collection_size / max(iteration_time, 1e-6))
 
         for key, value in loss_dict.items():
-            self.writer.add_scalar(f"Loss/{key}", value, it)
+            if key.startswith("Router/"):
+                self.writer.add_scalar(key, value, it)
+            else:
+                self.writer.add_scalar(f"Loss/{key}", value, it)
         self.writer.add_scalar("Loss/learning_rate", self.alg.learning_rate, it)
         self.writer.add_scalar("Policy/mean_noise_std", self.alg.policy.action_std.mean().item(), it)
         self.writer.add_scalar("Perf/total_fps", fps, it)
@@ -232,6 +235,9 @@ class OnPolicyRunner:
         )
         for key, value in loss_dict.items():
             log_string += f"{f'Mean {key}:':>{pad}} {value:.4f}\n"
+        router_string = self._format_router_weight_log(loss_dict, pad)
+        if router_string:
+            log_string += router_string
         if len(rewbuffer) > 0:
             log_string += f"{'Mean reward:':>{pad}} {statistics.mean(rewbuffer):.2f}\n"
             log_string += f"{'Mean episode length:':>{pad}} {statistics.mean(lenbuffer):.2f}\n"
@@ -267,6 +273,108 @@ class OnPolicyRunner:
             self.writer.add_scalar(key if "/" in key else "Episode/" + key, mean_value, it)
             ep_string += f"{f'{key}:':>{pad}} {mean_value:.4f}\n"
         return ep_string
+
+    def _format_router_weight_log(self, loss_dict: dict, pad: int) -> str:
+        router_entries = {
+            key.removeprefix("Router/"): value
+            for key, value in loss_dict.items()
+            if key.startswith("Router/")
+        }
+        formatted = self.format_router_weight_table(router_entries, pad=pad)
+        return formatted + "\n" if formatted else ""
+
+    @staticmethod
+    def aggregate_router_weights_by_task(
+        router_weights: torch.Tensor,
+        task_ids: torch.Tensor,
+        task_names: tuple[str, ...] | list[str],
+        expert_names: tuple[str, ...] | list[str],
+    ) -> dict[str, float]:
+        """Average router weights for each task/expert pair in a batch."""
+        stats: dict[str, float] = {}
+        task_ids = task_ids.long().view(-1)
+        for task_id, task_name in enumerate(task_names):
+            mask = task_ids == task_id
+            if not mask.any():
+                continue
+            task_weights = router_weights[mask].mean(dim=0)
+            for expert_idx, expert_name in enumerate(expert_names):
+                stats[f"{task_name}/{expert_name}"] = task_weights[expert_idx].item()
+        return stats
+
+    @staticmethod
+    def format_router_weight_table(router_entries: dict[str, float], pad: int = 35) -> str:
+        if not router_entries:
+            return ""
+
+        task_names: list[str] = []
+        expert_names: list[str] = []
+        for key in router_entries:
+            task_name, expert_name = key.split("/", 1)
+            if task_name not in task_names:
+                task_names.append(task_name)
+            if expert_name not in expert_names:
+                expert_names.append(expert_name)
+
+        lines = [f"{'MoE router weights:':>{pad}}"]
+        header = " " * pad + "  " + " ".join(f"{name:>16}" for name in expert_names)
+        lines.append(header)
+        for task_name in task_names:
+            weights = [
+                f"{router_entries.get(f'{task_name}/{expert_name}', 0.0):16.4f}"
+                for expert_name in expert_names
+            ]
+            lines.append(" " * pad + f"  {task_name:<16}" + "".join(weights))
+        return "\n".join(lines)
+
+    def infer_step(
+        self,
+        obs: dict[str, torch.Tensor],
+        inference_mode: str = "teacher",
+        routing_mode: str = "soft",
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Run one CTS-MoE inference step and return action mean plus router weights."""
+        if routing_mode not in ("soft", "one_hot"):
+            raise ValueError(f"routing_mode must be 'soft' or 'one_hot', got {routing_mode!r}")
+
+        self.eval_mode()
+        policy = self.alg.policy
+        run_device = self.device
+        obs = {key: value.to(run_device) for key, value in obs.items()}
+
+        if inference_mode == "teacher":
+            out = policy(
+                mode="teacher",
+                proprio=obs["proprio"],
+                task_id=obs["task_id"],
+                height_scan=obs["height_scan"],
+                privileged_obs=obs["privileged_obs"],
+            )
+        elif inference_mode == "student":
+            out = policy(
+                mode="student",
+                proprio=obs["proprio"],
+                task_id=obs["task_id"],
+                proprio_history=obs["proprio_history"],
+                perception=obs["perception"],
+            )
+        else:
+            raise ValueError(f"inference_mode must be 'teacher' or 'student', got {inference_mode!r}")
+
+        router_weights = out["router_weights"]
+        if routing_mode == "soft":
+            return out["action_mean"], router_weights
+
+        task_ids = obs["task_id"].long().view(-1)
+        num_experts = policy.moe_actor.num_experts
+        if torch.any(task_ids < 0) or torch.any(task_ids >= num_experts):
+            raise ValueError(f"task_id must be in [0, {num_experts - 1}] for one_hot routing")
+
+        batch_idx = torch.arange(task_ids.shape[0], device=task_ids.device)
+        action_mean = out["expert_actions"][batch_idx, task_ids]
+        effective_weights = torch.zeros_like(router_weights)
+        effective_weights[batch_idx, task_ids] = 1.0
+        return action_mean, effective_weights
 
     def save(self, path: str, infos=None):
         saved_dict = {
