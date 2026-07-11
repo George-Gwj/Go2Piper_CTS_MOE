@@ -194,6 +194,37 @@ class GridEncoder(nn.Module):
         return self.net(x)
 
 
+class HeightScanCNNEncoder(nn.Module):
+    """CNN for stacked height-scan rays shaped as [B, C, num_rays, 1]."""
+
+    def __init__(
+        self,
+        in_channels: int,
+        output_dim: int,
+        filters: Sequence[int] = (16, 32, 64),
+        activation: str | type[nn.Module] | nn.Module = "elu",
+    ):
+        super().__init__()
+        layers: list[nn.Module] = []
+        prev_channels = in_channels
+        for out_channels in filters:
+            layers.append(nn.Conv2d(prev_channels, out_channels, kernel_size=(3, 1), stride=1, padding=(1, 0)))
+            layers.append(_make_activation(activation))
+            layers.append(nn.MaxPool2d(kernel_size=(2, 1), stride=(2, 1), ceil_mode=True))
+            prev_channels = out_channels
+
+        layers.append(nn.AdaptiveAvgPool2d((1, 1)))
+        layers.append(nn.Flatten())
+        layers.append(nn.Linear(prev_channels, output_dim))
+        layers.append(_make_activation(activation))
+        self.net = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.dim() != 4:
+            raise ValueError(f"HeightScanCNNEncoder expects [B, C, H, W], got shape {tuple(x.shape)}")
+        return self.net(x)
+
+
 class TeacherEncoder(nn.Module):
     """Teacher encoder using privileged vector, height map, and optional context.
 
@@ -214,7 +245,9 @@ class TeacherEncoder(nn.Module):
         semantic_decoupled: bool = False,
         height_feature_dim: int = 128,
         privileged_feature_dim: int = 32,
+        height_encoder_type: str = "mlp",
         height_hidden_dims: Sequence[int] = (512, 256),
+        height_cnn_filters: Sequence[int] = (16, 32, 64),
         privileged_hidden_dims: Sequence[int] = (512, 256),
         activation: str | type[nn.Module] | nn.Module = "elu",
     ):
@@ -224,22 +257,33 @@ class TeacherEncoder(nn.Module):
         self.num_tasks = num_tasks
         self.context_dim = context_dim
         self.semantic_decoupled = semantic_decoupled
+        self.height_encoder_type = height_encoder_type.lower()
 
-        # h_t is the flattened multi-layer height map.  LazyLinear keeps this
-        # independent of the exact ray grid resolution until config wiring is done.
-        if height_flat_dim is None:
-            self.height_encoder = build_lazy_mlp(
-                hidden_dims=height_hidden_dims,
+        if self.height_encoder_type == "mlp":
+            # h_t is the flattened multi-layer height map. LazyLinear keeps this
+            # independent of the exact ray grid resolution until config wiring is done.
+            if height_flat_dim is None:
+                self.height_encoder = build_lazy_mlp(
+                    hidden_dims=height_hidden_dims,
+                    output_dim=height_feature_dim,
+                    activation=activation,
+                )
+            else:
+                self.height_encoder = build_mlp(
+                    height_flat_dim,
+                    hidden_dims=height_hidden_dims,
+                    output_dim=height_feature_dim,
+                    activation=activation,
+                )
+        elif self.height_encoder_type == "cnn":
+            self.height_encoder = HeightScanCNNEncoder(
+                in_channels=height_channels,
                 output_dim=height_feature_dim,
+                filters=height_cnn_filters,
                 activation=activation,
             )
         else:
-            self.height_encoder = build_mlp(
-                height_flat_dim,
-                hidden_dims=height_hidden_dims,
-                output_dim=height_feature_dim,
-                activation=activation,
-            )
+            raise ValueError("height_encoder_type must be 'mlp' or 'cnn'")
 
         self.privileged_encoder = build_mlp(
             privileged_dim,
@@ -270,7 +314,10 @@ class TeacherEncoder(nn.Module):
         if privileged_obs.dim() != 2:
             raise ValueError(f"privileged_obs must be [B, priv_dim], got {tuple(privileged_obs.shape)}")
 
-        height_feature = self.height_encoder(height_scan.flatten(start_dim=1))
+        if self.height_encoder_type == "mlp":
+            height_feature = self.height_encoder(height_scan.flatten(start_dim=1))
+        else:
+            height_feature = self.height_encoder(height_scan)
         privileged_feature = self.privileged_encoder(privileged_obs)
         projection_inputs = []
         if self.context_dim > 0:
@@ -703,7 +750,9 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         teacher_height_flat_dim: int | None = None,
         teacher_height_feature_dim: int = 128,
         teacher_privileged_feature_dim: int = 32,
+        teacher_height_encoder_type: str = "mlp",
         teacher_height_hidden_dims: Sequence[int] = (512, 256),
+        teacher_height_cnn_filters: Sequence[int] = (16, 32, 64),
         teacher_privileged_hidden_dims: Sequence[int] = (512, 256),
         student_perception_type: str = "grid",
         student_perception_dim: int | None = None,
@@ -755,7 +804,9 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             semantic_decoupled=semantic_decoupled_teacher,
             height_feature_dim=teacher_height_feature_dim,
             privileged_feature_dim=teacher_privileged_feature_dim,
+            height_encoder_type=teacher_height_encoder_type,
             height_hidden_dims=teacher_height_hidden_dims,
+            height_cnn_filters=teacher_height_cnn_filters,
             privileged_hidden_dims=teacher_privileged_hidden_dims,
             activation=activation,
         )

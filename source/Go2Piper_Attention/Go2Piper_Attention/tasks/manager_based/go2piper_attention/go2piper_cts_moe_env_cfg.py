@@ -142,7 +142,7 @@ class MySceneCfg(InteractiveSceneCfg):
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
         # debug_vis=True,
-        debug_vis=False,
+        debug_vis=True,
     )
 
     H_lateral_scan = MultiMeshRayCasterCfg(
@@ -172,7 +172,7 @@ class MySceneCfg(InteractiveSceneCfg):
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
         # debug_vis=True,
-        debug_vis=True,
+        debug_vis=False,
     )
 
     depth_image = MultiMeshRayCasterCameraCfg(
