@@ -335,10 +335,11 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _randomize_stair_up_scene(self, env_ids: torch.Tensor):
         if env_ids.numel() == 0:
             return
-        step_height = 0.1
-        step_depth = 0.35
+        task_cfg = self.cfg.multi_task_rewards
+        step_height = float(getattr(task_cfg, "stair_step_height", 0.1))
+        step_depth = float(getattr(task_cfg, "stair_step_depth", 0.35))
         start_x = torch.empty(env_ids.numel(), device=self.device).uniform_(0.85, 1.05)
-        num_steps = 7
+        num_steps = int(getattr(task_cfg, "stair_num_steps", 7))
         platform_length = 5.0
         for step_idx in range(num_steps):
             height = step_height * (step_idx + 1)

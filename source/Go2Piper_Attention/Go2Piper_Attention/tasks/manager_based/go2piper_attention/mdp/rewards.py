@@ -243,6 +243,67 @@ def base_height_tracking_in_table_region(
     return reward * gate
 
 
+def stair_up_forward_progress(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    first_step_object_name: str = "stair_step_0",
+    step_depth: float = 0.35,
+    num_steps: int = 7,
+    approach_margin: float = 0.4,
+    platform_margin: float = 0.7,
+) -> torch.Tensor:
+    """Reward normalized forward progress from the stair approach to the platform."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    first_step: RigidObject = env.scene[first_step_object_name]
+
+    robot_x = asset.data.root_pos_w[:, 0]
+    first_step_center_x = first_step.data.root_pos_w[:, 0]
+    first_step_front_edge_x = first_step_center_x - 0.5 * step_depth
+
+    progress_start_x = first_step_front_edge_x - approach_margin
+    progress_span = max(step_depth * float(num_steps) + approach_margin + platform_margin, 1.0e-6)
+
+    progress = (robot_x - progress_start_x) / progress_span
+    return torch.clamp(progress, min=0.0, max=1.0)
+
+
+def stair_up_base_height_progress(
+    env: ManagerBasedRLEnv,
+    desired_base_clearance: float,
+    std: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    first_step_object_name: str = "stair_step_0",
+    step_depth: float = 0.35,
+    step_height: float = 0.1,
+    num_steps: int = 7,
+    approach_margin: float = 0.2,
+) -> torch.Tensor:
+    """Track a base-height target that rises with the stair tread under the robot."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    first_step: RigidObject = env.scene[first_step_object_name]
+
+    robot_x = asset.data.root_pos_w[:, 0]
+    base_height_w = asset.data.root_pos_w[:, 2]
+    first_step_center_x = first_step.data.root_pos_w[:, 0]
+    first_step_ground_z = first_step.data.root_pos_w[:, 2] - 0.5 * step_height
+    first_step_front_edge_x = first_step_center_x - 0.5 * step_depth
+
+    stair_index_float = torch.floor((robot_x - first_step_front_edge_x) / step_depth) + 1.0
+    stair_index = torch.clamp(stair_index_float, min=0.0, max=float(num_steps))
+    expected_terrain_height = stair_index * step_height
+    target_base_height_w = first_step_ground_z + expected_terrain_height + desired_base_clearance
+
+    height_error = torch.abs(base_height_w - target_base_height_w)
+    reward = torch.exp(-height_error / std)
+
+    approach_gate = torch.clamp(
+        (robot_x - (first_step_front_edge_x - approach_margin)) / max(approach_margin, 1.0e-6),
+        min=0.0,
+        max=1.0,
+    )
+    return reward * approach_gate
+
+
 def action_rate_l2_arm(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Penalize the rate of change of the actions using L2 squared kernel."""
     return torch.sum(torch.square(env.action_manager.action[:,12:] - env.action_manager.prev_action[:,12:]), dim=1)

@@ -82,7 +82,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.end_effector_position_tracking_exp_common.weight = 4.0
         self.rewards.end_effector_position_tracking_l2_common.weight = -0.0
         self.rewards.end_effector_position_tracking_fine_grained_common.weight = 2.0
-        self.rewards.end_effector_orientation_tracking_common.weight = 0.0
+        
         self.rewards.end_effector_action_rate_common.weight = -0.005 #-0.005 
         self.rewards.end_effector_action_smoothness_common.weight = -0.02#-0.02
         self.rewards.end_effector_joint_vel_common.weight = -0.001 # -0.0001
@@ -90,7 +90,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.end_effector_ang_vel_xy_l2_common.weight = -0.0        
         self.rewards.end_effector_flat_orientation_l2_common.weight = -0.0
         self.rewards.track_ang_vel_z_exp_common.weight = 4.0
-        self.rewards.track_ori_exp_common.weight = 1.0
+        self.rewards.track_ori_exp_common.weight = 0.0
         self.rewards.ang_vel_xy_l2_common.weight = -0.1
         self.rewards.dof_torques_l2_common.weight = -1.0e-5 
         self.rewards.dof_acc_l2_common.weight =  -2.5e-7
@@ -127,37 +127,40 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
 
         # Under-table reward weights:
         # Add RewTerm fields ending with "_under_table" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_under_table.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_under_table.weight = 4.0
+        self.rewards.track_lin_vel_x_exp_under_table.weight = 2.0
+        self.rewards.track_lin_vel_y_exp_under_table.weight = 2.0
         self.rewards.track_base_height_exp_under_table.weight = 2.0
         self.rewards.lin_vel_z_l2_under_table.weight = -1.0
         self.rewards.thigh_contact_under_table.weight = -1.0
         self.rewards.calf_contact_under_table.weight = -1.0
         self.rewards.base_contact_under_table.weight = -1.0
         self.rewards.arm_contact_under_table.weight = -1.0
-        self.rewards.flat_orientation_l2_under_table.weight = -0.5 # -0.5
+        self.rewards.flat_orientation_l2_under_table.weight = -1.5 # -0.5
         self.rewards.feet_height_under_table.weight = -0.2
-        self.rewards.probe_clearance_under_table.weight = 2.0
+        self.rewards.probe_clearance_under_table.weight = 1.0
 
         # Stair-up reward weights:
         # Add RewTerm fields ending with "_stair_up" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_stair_up.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_stair_up.weight = 4.0
-        self.rewards.track_base_height_exp_stair_up.weight = 1.0
+        self.rewards.track_lin_vel_x_exp_stair_up.weight = 2.0
+        self.rewards.track_lin_vel_y_exp_stair_up.weight = 2.0
+        self.rewards.track_base_height_exp_stair_up.weight = 0.0
+        self.rewards.forward_progress_stair_up.weight = 3.0
+        self.rewards.base_height_progress_stair_up.weight = 1.5
         self.rewards.lin_vel_z_l2_stair_up.weight = -0.25
-        self.rewards.thigh_contact_stair_up.weight = -1.0
-        self.rewards.calf_contact_stair_up.weight = -1.0
-        self.rewards.base_contact_stair_up.weight = -1.0
-        self.rewards.arm_contact_stair_up.weight = -1.0
+        self.rewards.thigh_contact_stair_up.weight = -0.5
+        self.rewards.calf_contact_stair_up.weight = -0.5
+        self.rewards.base_contact_stair_up.weight = -0.5
+        self.rewards.arm_contact_stair_up.weight = -0.5
         self.rewards.flat_orientation_l2_stair_up.weight = -0.0 # -0.5
-        self.rewards.feet_height_body_stair_up.weight = -2.0
+        self.rewards.feet_height_body_stair_up.weight = 0.0
 
 
         # Flat reward weights:
         # Add RewTerm fields ending with "_flat" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_flat.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_flat.weight = 4.0
+        self.rewards.track_lin_vel_x_exp_flat.weight = 2.0
+        self.rewards.track_lin_vel_y_exp_flat.weight = 2.0
         self.rewards.track_base_height_exp_flat.weight = 1.0
+        self.rewards.end_effector_orientation_tracking_flat.weight = -0.5
         self.rewards.lin_vel_z_l2_flat.weight = -2.5
         self.rewards.thigh_contact_flat.weight = -0.5
         self.rewards.calf_contact_flat.weight = -0.5
