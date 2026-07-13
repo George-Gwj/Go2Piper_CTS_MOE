@@ -141,18 +141,18 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
 
         # Stair-up reward weights:
         # Add RewTerm fields ending with "_stair_up" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_stair_up.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_stair_up.weight = 2.0
-        self.rewards.track_base_height_exp_stair_up.weight = 0.0
-        self.rewards.forward_progress_stair_up.weight = 3.0
-        self.rewards.base_height_progress_stair_up.weight = 1.5
+        self.rewards.track_lin_vel_x_exp_stair_up.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_stair_up.weight = 4.0
+        self.rewards.track_base_height_exp_stair_up.weight = 1.0
+        self.rewards.forward_progress_stair_up.weight = 0.0
+        self.rewards.base_height_progress_stair_up.weight = 0.0
         self.rewards.lin_vel_z_l2_stair_up.weight = -0.25
-        self.rewards.thigh_contact_stair_up.weight = -0.5
-        self.rewards.calf_contact_stair_up.weight = -0.5
-        self.rewards.base_contact_stair_up.weight = -0.5
-        self.rewards.arm_contact_stair_up.weight = -0.5
-        self.rewards.flat_orientation_l2_stair_up.weight = -0.0 # -0.5
-        self.rewards.feet_height_body_stair_up.weight = 0.0
+        self.rewards.thigh_contact_stair_up.weight = -0.0
+        self.rewards.calf_contact_stair_up.weight = -0.0
+        self.rewards.base_contact_stair_up.weight = -0.0
+        self.rewards.arm_contact_stair_up.weight = -0.0
+        self.rewards.flat_orientation_l2_stair_up.weight = -0.5 # -0.5
+        self.rewards.feet_height_body_stair_up.weight = -5.0
 
 
         # Flat reward weights:
@@ -166,7 +166,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.calf_contact_flat.weight = -0.5
         self.rewards.base_contact_flat.weight = -0.5
         self.rewards.arm_contact_flat.weight = -0.5
-        self.rewards.flat_orientation_l2_flat.weight = -0.5 # -0.5
+        self.rewards.flat_orientation_l2_flat.weight = -1.5 # -0.5
         self.rewards.feet_height_flat.weight = -0.2
 
 

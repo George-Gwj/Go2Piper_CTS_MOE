@@ -492,19 +492,21 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         """Collect instantaneous command-tracking metrics for each env."""
         metrics: dict[str, torch.Tensor] = {}
 
-        ee_term = self.command_manager.get_term("ee_pose")
-        metrics["ee_pose/position_error"] = ee_term.metrics["position_error"]
-        metrics["ee_pose/orientation_error"] = ee_term.metrics["orientation_error"]
+        if "ee_pose" in self.command_manager._terms:
+            ee_term = self.command_manager.get_term("ee_pose")
+            metrics["ee_pose/position_error"] = ee_term.metrics["position_error"]
+            metrics["ee_pose/orientation_error"] = ee_term.metrics["orientation_error"]
 
-        vel_term = self.command_manager.get_term("base_velocity")
-        vel_command = vel_term.command
-        metrics["base_velocity/error_vel_xy"] = torch.norm(
-            vel_command[:, :2] - self.robot.data.root_lin_vel_b[:, :2],
-            dim=-1,
-        )
-        metrics["base_velocity/error_vel_yaw"] = torch.abs(
-            vel_command[:, 2] - self.robot.data.root_ang_vel_b[:, 2]
-        )
+        if "base_velocity" in self.command_manager._terms:
+            vel_term = self.command_manager.get_term("base_velocity")
+            vel_command = vel_term.command
+            metrics["base_velocity/error_vel_xy"] = torch.norm(
+                vel_command[:, :2] - self.robot.data.root_lin_vel_b[:, :2],
+                dim=-1,
+            )
+            metrics["base_velocity/error_vel_yaw"] = torch.abs(
+                vel_command[:, 2] - self.robot.data.root_ang_vel_b[:, 2]
+            )
 
         metrics["base/height_w"] = self.robot.data.root_pos_w[:, 2]
         metrics["base/height_above_terrain"] = self._compute_base_height_above_terrain()

@@ -3,6 +3,7 @@ import math
 from dataclasses import MISSING
 
 import isaaclab.sim as sim_utils
+import torch
 from isaaclab.assets import ArticulationCfg, AssetBaseCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
@@ -38,6 +39,13 @@ from isaaclab.assets import (
 # Pre-defined configs
 ##
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
+
+
+def cts_moe_task_context(env) -> torch.Tensor:
+    """Task context scalar ct as [B, 1], using task ids 0..3."""
+    if not hasattr(env, "task_id"):
+        return torch.zeros((env.num_envs, 1), device=env.device)
+    return env.task_id.float().unsqueeze(-1)
 
 
 ##
@@ -109,9 +117,9 @@ class MySceneCfg(InteractiveSceneCfg):
     # sensors
     height_scanner = MultiMeshRayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        offset=RayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 3.0)),
+        offset=RayCasterCfg.OffsetCfg(pos=(0.1, 0.0, 3.0)),
         ray_alignment="yaw",
-        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[0.4, 0.4]),
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[0.4, 0.3]),
         debug_vis=False,
         mesh_prim_paths=[
             "/World/ground",
@@ -137,6 +145,8 @@ class MySceneCfg(InteractiveSceneCfg):
             "/World/ground",
             MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True),
             MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True),
+            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/box_obstacle", track_mesh_transforms=True),
+            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/table_top", track_mesh_transforms=True),
         ],
         offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.5, 0.0, 3.0)),
         ray_alignment="yaw",
@@ -583,6 +593,7 @@ class ObservationsCfg:
             func=leg_obs.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )  # dim = 3
+        ct = ObsTerm(func=cts_moe_task_context)  # dim = 1
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -614,6 +625,7 @@ class ObservationsCfg:
             history_length=5,
             noise=Unoise(n_min=-0.05, n_max=0.05),
         )  # dim = 3
+        ct = ObsTerm(func=cts_moe_task_context, history_length=5)  # dim = 1
 
         def __post_init__(self):
             self.enable_corruption = True
@@ -650,6 +662,7 @@ class ObservationsCfg:
             func=arm_obs.end_effector_pos_ori_b,
             params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector")},
         )  # dim = 7
+        ct = ObsTerm(func=cts_moe_task_context)  # dim = 1
 
         def __post_init__(self):
             self.enable_corruption = False
@@ -682,12 +695,10 @@ class ObservationsCfg:
             params={
                 "sensor_cfgs": [
                     SceneEntityCfg("H_ground_scan"),
-                    SceneEntityCfg("H_lateral_scan"),
-                    SceneEntityCfg("H_overhead_scan"),
                 ],
                 "offset": 0.5,
             },
-        )  # shape: [B, 3, num_rays, 1]
+        )  # shape: [B, 1, num_rays, 1]
 
         def __post_init__(self):
             self.enable_corruption = False

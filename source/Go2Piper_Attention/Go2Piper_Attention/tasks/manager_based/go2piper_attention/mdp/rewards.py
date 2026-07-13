@@ -187,7 +187,7 @@ def base_height_tracking(
     std: float,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
-    terrain_height_mode: str = "max",
+    terrain_height_mode: str = "mean",
 ):
     asset: RigidObject = env.scene[asset_cfg.name]
 

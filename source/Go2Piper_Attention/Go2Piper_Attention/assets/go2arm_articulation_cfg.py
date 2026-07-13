@@ -1,6 +1,6 @@
 import os
 current_dir = os.path.dirname(os.path.abspath(__file__))
-GO2PIPER_USD = os.path.join(current_dir, "go2_piper_camera_probe.usd")
+GO2PIPER_USD = os.path.join(current_dir, "go2_piper_fixedarm.usd")
 
 import isaaclab.sim as sim_utils
 from isaaclab.actuators import DCMotorCfg, ImplicitActuatorCfg, IdealPDActuatorCfg, DelayedPDActuatorCfg
