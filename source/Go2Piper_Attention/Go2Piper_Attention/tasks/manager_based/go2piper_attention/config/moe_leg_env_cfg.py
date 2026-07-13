@@ -42,13 +42,13 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         ##  velocity command
         self.commands.base_velocity.curriculum_coeff = 4000
         # init
-        self.commands.base_velocity.rel_standing_envs = 0.1
-        self.commands.base_velocity.resampling_time_range = (1e6, 1e6)
-        self.commands.base_velocity.ranges_init.lin_vel_x  = (-0.0, 0.3)
+        self.commands.base_velocity.rel_standing_envs = 0.05
+        self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
+        self.commands.base_velocity.ranges_init.lin_vel_x  = (0.15, 0.3)
         self.commands.base_velocity.ranges_init.lin_vel_y  = (0.0, 0.0)
         self.commands.base_velocity.ranges_init.ang_vel_z  = (0.0, 0.0)
         # final
-        self.commands.base_velocity.ranges_final.lin_vel_x = (-0.0, 0.8)
+        self.commands.base_velocity.ranges_final.lin_vel_x = (0.3, 0.8)
         self.commands.base_velocity.ranges_final.lin_vel_y = (0.0, 0.0)
         self.commands.base_velocity.ranges_final.ang_vel_z = (0.0, 0.0)
         # Flat task can use a separate command curriculum while other tasks keep the ranges above.
@@ -66,7 +66,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         )
         
         # Common reward weights.  Reward terms ending with "_common" are used by all tasks.
-        self.rewards.track_ang_vel_z_exp_common.weight = 4.0
+        self.rewards.track_ang_vel_z_exp_common.weight = 1.0
         self.rewards.ang_vel_xy_l2_common.weight = -0.1
         self.rewards.dof_torques_l2_common.weight = -1.0e-5 
         self.rewards.dof_acc_l2_common.weight =  -2.5e-7
@@ -91,7 +91,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # Box-avoidance reward weights:
         # Add RewTerm fields ending with "_box_avoidance" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_box_avoidance.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_box_avoidance.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_box_avoidance.weight = 0.2
         self.rewards.track_base_height_exp_box_avoidance.weight = 1.0
         self.rewards.lin_vel_z_l2_box_avoidance.weight = -2.5
         self.rewards.thigh_contact_box_avoidance.weight = -1.0
@@ -102,8 +102,8 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
 
         # Under-table reward weights:
         # Add RewTerm fields ending with "_under_table" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_under_table.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_under_table.weight = 2.0
+        self.rewards.track_lin_vel_x_exp_under_table.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_under_table.weight = 0.2
         self.rewards.track_base_height_exp_under_table.weight = 2.0
         self.rewards.lin_vel_z_l2_under_table.weight = -1.0
         self.rewards.thigh_contact_under_table.weight = -1.0
@@ -114,8 +114,8 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
 
         # Stair-up reward weights:
         # Add RewTerm fields ending with "_stair_up" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_stair_up.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_stair_up.weight = 2.0
+        self.rewards.track_lin_vel_x_exp_stair_up.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_stair_up.weight = 0.2
         self.rewards.track_base_height_exp_stair_up.weight = 1.0
         self.rewards.forward_progress_stair_up.weight = 0.0
         self.rewards.base_height_progress_stair_up.weight = 0.0
@@ -129,8 +129,8 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
 
         # Flat reward weights:
         # Add RewTerm fields ending with "_flat" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_flat.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_flat.weight = 2.0
+        self.rewards.track_lin_vel_x_exp_flat.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_flat.weight = 0.2
         self.rewards.track_base_height_exp_flat.weight = 1.0
         self.rewards.lin_vel_z_l2_flat.weight = -2.5
         self.rewards.thigh_contact_flat.weight = -0.5
