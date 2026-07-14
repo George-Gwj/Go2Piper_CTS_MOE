@@ -66,7 +66,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         )
         
         # Common reward weights.  Reward terms ending with "_common" are used by all tasks.
-        self.rewards.track_ang_vel_z_exp_common.weight = 4.0
+        self.rewards.track_ang_vel_z_exp_common.weight = 1.0
         self.rewards.ang_vel_xy_l2_common.weight = -0.1
         self.rewards.dof_torques_l2_common.weight = -1.0e-5 
         self.rewards.dof_acc_l2_common.weight =  -2.5e-7
@@ -175,6 +175,6 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         self.commands.base_velocity.rel_standing_envs = 0.1
         
         # final
-        self.commands.base_velocity.ranges.lin_vel_x = (0.3, 0.8)
+        self.commands.base_velocity.ranges.lin_vel_x = (0.5, 0.8)
         self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
         self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
