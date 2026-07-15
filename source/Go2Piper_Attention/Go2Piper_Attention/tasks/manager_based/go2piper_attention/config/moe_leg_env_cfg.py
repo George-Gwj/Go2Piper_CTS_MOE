@@ -49,7 +49,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.commands.base_velocity.ranges_final.ang_vel_z = (-0.5, 0.5)
         
         # Common reward weights.  Reward terms ending with "_common" are used by all tasks.
-        self.rewards.track_ang_vel_z_exp_common.weight = 1.0
+        self.rewards.track_ang_vel_z_exp_common.weight = 2.0
         self.rewards.ang_vel_xy_l2_common.weight = -0.1
         self.rewards.dof_torques_l2_common.weight = -1.0e-5 
         self.rewards.dof_acc_l2_common.weight =  -2.5e-7
