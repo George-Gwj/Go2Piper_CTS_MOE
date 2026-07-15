@@ -213,6 +213,72 @@ def base_height_tracking(
     return torch.exp(-height_error / std)
 
 
+def robot_in_floating_ring_region(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    floating_ring_terrain_type: int = 3,
+    platform_width: float = 2.0,
+    ring_width_range: tuple[float, float] = (0.6, 1.8),
+    difficulty_range: tuple[float, float] = (0.0, 1.0),
+    margin: float = 0.0,
+) -> torch.Tensor:
+    """Return 1.0 when the robot base is inside the floating-ring footprint."""
+    terrain = env.scene.terrain
+    if not hasattr(terrain, "terrain_types") or not hasattr(terrain, "terrain_levels"):
+        return torch.zeros(env.num_envs, device=env.device)
+
+    asset: RigidObject = env.scene[asset_cfg.name]
+    terrain_levels = terrain.terrain_levels.float()
+    max_level = max(float(getattr(terrain, "max_terrain_level", 1) - 1), 1.0)
+    lower, upper = difficulty_range
+    difficulty = lower + (upper - lower) * torch.clamp(terrain_levels / max_level, 0.0, 1.0)
+
+    ring_width = ring_width_range[0] + difficulty * (ring_width_range[1] - ring_width_range[0])
+    inner_half_width = 0.5 * platform_width - margin
+    outer_half_width = 0.5 * platform_width + ring_width + margin
+
+    local_xy = asset.data.root_pos_w[:, :2] - env.scene.env_origins[:, :2]
+    abs_xy = torch.abs(local_xy)
+    inside_outer = (abs_xy[:, 0] <= outer_half_width) & (abs_xy[:, 1] <= outer_half_width)
+    outside_inner = (abs_xy[:, 0] >= inner_half_width) | (abs_xy[:, 1] >= inner_half_width)
+    on_floating_ring = terrain.terrain_types == floating_ring_terrain_type
+    return (on_floating_ring & inside_outer & outside_inner).float()
+
+
+def base_height_tracking_in_floating_ring_region(
+    env: ManagerBasedRLEnv,
+    desired_height: float,
+    std: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
+    terrain_height_mode: str = "max",
+    floating_ring_terrain_type: int = 3,
+    platform_width: float = 2.0,
+    ring_width_range: tuple[float, float] = (0.6, 1.8),
+    difficulty_range: tuple[float, float] = (0.0, 1.0),
+    margin: float = 0.0,
+) -> torch.Tensor:
+    """Track base height only when the robot is below the floating-ring obstacle."""
+    reward = base_height_tracking(
+        env,
+        desired_height=desired_height,
+        std=std,
+        asset_cfg=asset_cfg,
+        sensor_cfg=sensor_cfg,
+        terrain_height_mode=terrain_height_mode,
+    )
+    gate = robot_in_floating_ring_region(
+        env,
+        asset_cfg=asset_cfg,
+        floating_ring_terrain_type=floating_ring_terrain_type,
+        platform_width=platform_width,
+        ring_width_range=ring_width_range,
+        difficulty_range=difficulty_range,
+        margin=margin,
+    )
+    return reward * gate
+
+
 def base_height_tracking_in_table_region(
     env: ManagerBasedRLEnv,
     desired_height: float,

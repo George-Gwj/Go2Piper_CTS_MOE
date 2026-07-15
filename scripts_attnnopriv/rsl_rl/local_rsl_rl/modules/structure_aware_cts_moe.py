@@ -421,10 +421,11 @@ class MoEActor(nn.Module):
     """Dense Mixture-of-Experts actor with soft routing."""
 
     DEFAULT_EXPERT_NAMES = (
-        "lateral_avoidance",
-        "under_table",
-        "stair_up",
         "flat",
+        "ascend",
+        "descend",
+        "floating_ring",
+        "rough",
     )
 
     def __init__(
@@ -633,10 +634,11 @@ class SparseMultiCritic(nn.Module):
     """Sparse task-conditioned critic with one value head per task."""
 
     TASK_NAMES = (
-        "box_avoidance",
-        "under_table",
-        "stair_up",
         "flat",
+        "ascend",
+        "descend",
+        "floating_ring",
+        "rough",
     )
 
     def __init__(

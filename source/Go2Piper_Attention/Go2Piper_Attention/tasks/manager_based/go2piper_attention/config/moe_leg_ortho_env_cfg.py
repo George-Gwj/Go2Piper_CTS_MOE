@@ -9,7 +9,6 @@ from Go2Piper_Attention.tasks.manager_based.go2piper_attention.go2piper_leg_cts_
     LocomotionVelocityEnvCfg,
 )
 from Go2Piper_Attention.assets.go2arm_articulation_cfg import GO2PIPER_CFG
-from Go2Piper_Attention.tasks.manager_based.go2piper_attention.mdp import command_cfg
 
 
 @configclass
@@ -33,11 +32,8 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.events.push_robot = None
 
         # flat terrain 
-        self.scene.terrain.terrain_type = "plane"
-        self.scene.terrain.terrain_generator = None
-
-        # Temporarily disable box-avoidance task; keep its obstacle underground.
-        self.multi_task_rewards.enable_box_avoidance = False
+        # self.scene.terrain.terrain_type = "plane"
+        # self.scene.terrain.terrain_generator = None
 
         ##  velocity command
         self.commands.base_velocity.curriculum_coeff = 4000
@@ -45,25 +41,12 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.commands.base_velocity.rel_standing_envs = 0.05
         self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
         self.commands.base_velocity.ranges_init.lin_vel_x  = (0.15, 0.3)
-        self.commands.base_velocity.ranges_init.lin_vel_y  = (0.0, 0.0)
-        self.commands.base_velocity.ranges_init.ang_vel_z  = (0.0, 0.0)
+        self.commands.base_velocity.ranges_init.lin_vel_y  = (-0.2, 0.2)
+        self.commands.base_velocity.ranges_init.ang_vel_z  = (-0.2, 0.2)
         # final
         self.commands.base_velocity.ranges_final.lin_vel_x = (0.3, 0.8)
-        self.commands.base_velocity.ranges_final.lin_vel_y = (0.0, 0.0)
-        self.commands.base_velocity.ranges_final.ang_vel_z = (0.0, 0.0)
-        # Flat task can use a separate command curriculum while other tasks keep the ranges above.
-        self.commands.base_velocity.flat_ranges_init = command_cfg.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.0, 0.3),
-            lin_vel_y=(0.0, 0.0),
-            ang_vel_z=(0.0, 0.0),
-            heading=(-0.0, 0.0),
-        )
-        self.commands.base_velocity.flat_ranges_final = command_cfg.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.0, 0.8),
-            lin_vel_y=(0.0, 0.0),
-            ang_vel_z=(0.0, 0.0),
-            heading=(-0.0, 0.0),
-        )
+        self.commands.base_velocity.ranges_final.lin_vel_y = (-0.5, 0.5)
+        self.commands.base_velocity.ranges_final.ang_vel_z = (-0.5, 0.5)
         
         # Common reward weights.  Reward terms ending with "_common" are used by all tasks.
         self.rewards.track_ang_vel_z_exp_common.weight = 1.0
@@ -88,43 +71,54 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.action_smoothness_common.weight = -0.02 # -0.02
 
 
-        # Box-avoidance reward weights:
-        # Add RewTerm fields ending with "_box_avoidance" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_box_avoidance.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_box_avoidance.weight = 0.2
-        self.rewards.track_base_height_exp_box_avoidance.weight = 1.0
-        self.rewards.lin_vel_z_l2_box_avoidance.weight = -2.5
-        self.rewards.thigh_contact_box_avoidance.weight = -1.0
-        self.rewards.calf_contact_box_avoidance.weight = -1.0
-        self.rewards.base_contact_box_avoidance.weight = -1.0
-        self.rewards.flat_orientation_l2_box_avoidance.weight = -0.5 # -0.5
-        self.rewards.feet_height_box_avoidance.weight = -0.2
+        # Rough reward weights:
+        # Add RewTerm fields ending with "_rough" in RewardsCfg, then configure them here.
+        self.rewards.track_lin_vel_x_exp_rough.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_rough.weight = 0.2
+        self.rewards.track_base_height_exp_rough.weight = 1.0
+        self.rewards.lin_vel_z_l2_rough.weight = -2.5
+        self.rewards.thigh_contact_rough.weight = -1.0
+        self.rewards.calf_contact_rough.weight = -1.0
+        self.rewards.base_contact_rough.weight = -1.0
+        self.rewards.flat_orientation_l2_rough.weight = -0.5 # -0.5
+        self.rewards.feet_height_rough.weight = -0.2
 
-        # Under-table reward weights:
-        # Add RewTerm fields ending with "_under_table" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_under_table.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_under_table.weight = 0.2
-        self.rewards.track_base_height_exp_under_table.weight = 2.0
-        self.rewards.lin_vel_z_l2_under_table.weight = -1.0
-        self.rewards.thigh_contact_under_table.weight = -1.0
-        self.rewards.calf_contact_under_table.weight = -1.0
-        self.rewards.base_contact_under_table.weight = -1.0
-        self.rewards.flat_orientation_l2_under_table.weight = -1.5 # -0.5
-        self.rewards.feet_height_under_table.weight = -0.2
+        # Floating-ring reward weights:
+        # Add RewTerm fields ending with "_floating_ring" in RewardsCfg, then configure them here.
+        self.rewards.track_lin_vel_x_exp_floating_ring.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_floating_ring.weight = 0.2
+        # self.rewards.track_base_height_exp_floating_ring.weight = 0.0
+        self.rewards.track_base_height_exp_floating_ring.weight = 2.0
+        self.rewards.lin_vel_z_l2_floating_ring.weight = -1.0
+        self.rewards.thigh_contact_floating_ring.weight = -1.0
+        self.rewards.calf_contact_floating_ring.weight = -1.0
+        self.rewards.base_contact_floating_ring.weight = -1.0
+        self.rewards.flat_orientation_l2_floating_ring.weight = -1.5 # -0.5
+        self.rewards.feet_height_floating_ring.weight = -0.2
 
-        # Stair-up reward weights:
-        # Add RewTerm fields ending with "_stair_up" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_stair_up.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_stair_up.weight = 0.2
-        self.rewards.track_base_height_exp_stair_up.weight = 1.0
-        self.rewards.forward_progress_stair_up.weight = 0.0
-        self.rewards.base_height_progress_stair_up.weight = 0.0
-        self.rewards.lin_vel_z_l2_stair_up.weight = -0.25
-        self.rewards.thigh_contact_stair_up.weight = -0.5
-        self.rewards.calf_contact_stair_up.weight = -0.5
-        self.rewards.base_contact_stair_up.weight = -0.5
-        self.rewards.flat_orientation_l2_stair_up.weight = -0.5 # -0.5
-        self.rewards.feet_height_body_stair_up.weight = -5.0
+        # Ascend reward weights:
+        # Add RewTerm fields ending with "_ascend" in RewardsCfg, then configure them here.
+        self.rewards.track_lin_vel_x_exp_ascend.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_ascend.weight = 0.2
+        self.rewards.track_base_height_exp_ascend.weight = 1.0
+        self.rewards.lin_vel_z_l2_ascend.weight = -0.25
+        self.rewards.thigh_contact_ascend.weight = -0.5
+        self.rewards.calf_contact_ascend.weight = -0.5
+        self.rewards.base_contact_ascend.weight = -0.5
+        self.rewards.flat_orientation_l2_ascend.weight = -0.5 # -0.5
+        self.rewards.feet_height_body_ascend.weight = -5.0
+
+        # Descend reward weights:
+        # Add RewTerm fields ending with "_descend" in RewardsCfg, then configure them here.
+        self.rewards.track_lin_vel_x_exp_descend.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_descend.weight = 0.2
+        self.rewards.track_base_height_exp_descend.weight = 1.0
+        self.rewards.lin_vel_z_l2_descend.weight = -0.25
+        self.rewards.thigh_contact_descend.weight = -0.5
+        self.rewards.calf_contact_descend.weight = -0.5
+        self.rewards.base_contact_descend.weight = -0.5
+        self.rewards.flat_orientation_l2_descend.weight = -0.5
+        self.rewards.feet_height_body_descend.weight = -5.0
 
 
         # Flat reward weights:

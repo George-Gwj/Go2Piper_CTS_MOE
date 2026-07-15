@@ -32,7 +32,16 @@ from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 
 
 def cts_moe_task_context(env) -> torch.Tensor:
-    """Task context scalar ct as [B, 1], using task ids 0..3."""
+    """Terrain context scalar ct as [B, 1], using terrain type ids 0..4."""
+    terrain = getattr(env.scene, "terrain", None)
+    terrain_cfg = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+    if (
+        terrain is not None
+        and hasattr(terrain, "terrain_types")
+        and terrain_cfg is not None
+        and terrain_cfg.num_cols == len(terrain_cfg.sub_terrains)
+    ):
+        return terrain.terrain_types.float().unsqueeze(-1)
     if not hasattr(env, "task_id"):
         return torch.zeros((env.num_envs, 1), device=env.device)
     return env.task_id.float().unsqueeze(-1)
@@ -115,7 +124,7 @@ class MySceneCfg(InteractiveSceneCfg):
         prim_path="/World/ground",
         terrain_type="generator",
         terrain_generator=CTS_MOE_TERRAINS_CFG,
-        max_init_terrain_level=5,
+        max_init_terrain_level=0,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
             friction_combine_mode="multiply",
@@ -280,7 +289,7 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (0.0, 0.0), "y": (0.0, 0.0), "yaw": (0.0, 0.0)},
+            "pose_range": {"x": (0.0, 0.0), "y": (0.0, 0.0), "yaw": (-1.57, 1.57)},
             "velocity_range": {
                 "x": (0.0, 0.0),
                 "y": (0.0, 0.0),
@@ -498,32 +507,42 @@ class RewardsCfg:
     """Reward terms for the MDP."""
 
     # -- LEG
-    track_lin_vel_x_exp_box_avoidance = RewTerm(
+    track_lin_vel_x_exp_rough = RewTerm(
         func=mdp.track_lin_vel_x_exp,
         weight=1.5,
         params={"command_name": "base_velocity", "std": 0.2},
     )
-    track_lin_vel_y_exp_box_avoidance = RewTerm(
+    track_lin_vel_y_exp_rough = RewTerm(
         func=mdp.track_lin_vel_y_exp,
         weight=0.2,
         params={"command_name": "base_velocity", "std": 0.2},
     )
-    track_lin_vel_x_exp_under_table = RewTerm(
+    track_lin_vel_x_exp_floating_ring = RewTerm(
         func=mdp.track_lin_vel_x_exp,
         weight=1.5,
         params={"command_name": "base_velocity", "std": 0.2},
     )
-    track_lin_vel_y_exp_under_table = RewTerm(
+    track_lin_vel_y_exp_floating_ring = RewTerm(
         func=mdp.track_lin_vel_y_exp,
         weight=1.5,
         params={"command_name": "base_velocity", "std": 0.2},
     )
-    track_lin_vel_x_exp_stair_up = RewTerm(
+    track_lin_vel_x_exp_ascend = RewTerm(
         func=mdp.track_lin_vel_x_exp,
         weight=1.5,
         params={"command_name": "base_velocity", "std": 0.2},
     )
-    track_lin_vel_y_exp_stair_up = RewTerm(
+    track_lin_vel_y_exp_ascend = RewTerm(
+        func=mdp.track_lin_vel_y_exp,
+        weight=1.5,
+        params={"command_name": "base_velocity", "std": 0.2},
+    )
+    track_lin_vel_x_exp_descend = RewTerm(
+        func=mdp.track_lin_vel_x_exp,
+        weight=1.5,
+        params={"command_name": "base_velocity", "std": 0.2},
+    )
+    track_lin_vel_y_exp_descend = RewTerm(
         func=mdp.track_lin_vel_y_exp,
         weight=1.5,
         params={"command_name": "base_velocity", "std": 0.2},
@@ -549,7 +568,7 @@ class RewardsCfg:
                  "std": math.sqrt(0.2)}
     )
 
-    track_base_height_exp_box_avoidance = RewTerm(
+    track_base_height_exp_rough = RewTerm(
         func=mdp.base_height_tracking, 
         weight=0.5,
          params={ 
@@ -557,26 +576,45 @@ class RewardsCfg:
                  "std": 0.02}
     )
 
-    track_base_height_exp_under_table = RewTerm(
-        func=mdp.base_height_tracking_in_table_region,
-        weight=0.5,
+    # track_base_height_exp_floating_ring = RewTerm(
+    #     func=mdp.base_height_tracking,
+    #     weight=0.5,
+    #     params={
+    #         "desired_height": 0.22,
+    #         "std": 0.02,
+    #     },
+    # )
+
+    track_base_height_exp_floating_ring = RewTerm(
+        func=mdp.base_height_tracking_in_floating_ring_region,
+        weight=0.0,
         params={
             "desired_height": 0.22,
             "std": 0.02,
-            "table_half_extents_xy": (1.0 + 0.5, 0.7),
+            "floating_ring_terrain_type": 3,
+            "platform_width": 2.0,
+            "ring_width_range": (0.6, 1.8),
+            "margin": 0.4,
         },
     )
 
-    track_base_height_exp_stair_up = RewTerm(
+    track_base_height_exp_ascend = RewTerm(
         func=mdp.base_height_tracking, 
         weight=0.5,
          params={ 
                  "desired_height": 0.3, 
                  "std": 0.02}
     )
+    track_base_height_exp_descend = RewTerm(
+        func=mdp.base_height_tracking,
+        weight=0.5,
+         params={
+                 "desired_height": 0.3,
+                 "std": 0.02}
+    )
 
-    forward_progress_stair_up = None
-    base_height_progress_stair_up = None
+    forward_progress_ascend = None
+    base_height_progress_ascend = None
 
     track_base_height_exp_flat = RewTerm(
         func=mdp.base_height_tracking, 
@@ -587,9 +625,10 @@ class RewardsCfg:
     )
 
 
-    lin_vel_z_l2_box_avoidance = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.5)
-    lin_vel_z_l2_under_table = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
-    lin_vel_z_l2_stair_up = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
+    lin_vel_z_l2_rough = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.5)
+    lin_vel_z_l2_floating_ring = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
+    lin_vel_z_l2_ascend = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
+    lin_vel_z_l2_descend = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
     lin_vel_z_l2_flat = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
 
 
@@ -644,7 +683,7 @@ class RewardsCfg:
             "command_name": "base_velocity",
         },
     )
-    feet_height_under_table = RewTerm(
+    feet_height_floating_ring = RewTerm(
         func=mdp.feet_height,
         weight=0.0,
         params={
@@ -654,7 +693,7 @@ class RewardsCfg:
             "command_name": "base_velocity",
         },
     )
-    feet_height_box_avoidance = RewTerm(
+    feet_height_rough = RewTerm(
         func=mdp.feet_height,
         weight=0.0,
         params={
@@ -675,7 +714,17 @@ class RewardsCfg:
     )
     
 
-    feet_height_body_stair_up = RewTerm(
+    feet_height_body_ascend = RewTerm(
+        func=mdp.feet_height_body,
+        weight=0.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            "tanh_mult": 2.0,
+            "target_height": -0.2,
+            "command_name": "base_velocity",
+        },
+    )
+    feet_height_body_descend = RewTerm(
         func=mdp.feet_height_body,
         weight=0.0,
         params={
@@ -766,26 +815,32 @@ class RewardsCfg:
         weight=-0.02,
     )
     
-    flat_orientation_l2_box_avoidance = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
-    flat_orientation_l2_under_table = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
-    flat_orientation_l2_stair_up = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    flat_orientation_l2_rough = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    flat_orientation_l2_floating_ring = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    flat_orientation_l2_ascend = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    flat_orientation_l2_descend = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     flat_orientation_l2_flat = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
 
     # height_reward = RewTerm(func=mdp.base_height_l2, weight=-2.0, params={"target_height": 0.31, "std":0.03})
 
     # height_exp_reward = RewTerm(func=mdp.base_height_exp, weight=-2.0, params={"target_height": 0.31, "std":0.03})
 
-    thigh_contact_box_avoidance = RewTerm(
+    thigh_contact_rough = RewTerm(
         func=mdp.undesired_contacts,
         weight=-2.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh"), "threshold": 0.5},
     )
-    thigh_contact_under_table = RewTerm(
+    thigh_contact_floating_ring = RewTerm(
         func=mdp.undesired_contacts,
         weight=-2.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh"), "threshold": 0.5},
     )
-    thigh_contact_stair_up = RewTerm(
+    thigh_contact_ascend = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-2.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh"), "threshold": 0.5},
+    )
+    thigh_contact_descend = RewTerm(
         func=mdp.undesired_contacts,
         weight=-2.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh"), "threshold": 0.5},
@@ -798,17 +853,22 @@ class RewardsCfg:
 
 
 
-    calf_contact_box_avoidance = RewTerm(
+    calf_contact_rough = RewTerm(
         func=mdp.undesired_contacts,
         weight=-2.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"), "threshold": 0.5},
     )
-    calf_contact_under_table = RewTerm(
+    calf_contact_floating_ring = RewTerm(
         func=mdp.undesired_contacts,
         weight=-2.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"), "threshold": 0.5},
     )
-    calf_contact_stair_up = RewTerm(
+    calf_contact_ascend = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-2.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"), "threshold": 0.5},
+    )
+    calf_contact_descend = RewTerm(
         func=mdp.undesired_contacts,
         weight=-2.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"), "threshold": 0.5},
@@ -821,17 +881,22 @@ class RewardsCfg:
 
 
 
-    base_contact_box_avoidance = RewTerm(
+    base_contact_rough = RewTerm(
         func=mdp.undesired_contacts,
         weight=-1.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 0.5},
     )
-    base_contact_under_table = RewTerm(
+    base_contact_floating_ring = RewTerm(
         func=mdp.undesired_contacts,
         weight=-1.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 0.5},
     )
-    base_contact_stair_up = RewTerm(
+    base_contact_ascend = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 0.5},
+    )
+    base_contact_descend = RewTerm(
         func=mdp.undesired_contacts,
         weight=-1.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 0.5},
@@ -845,7 +910,7 @@ class RewardsCfg:
 
 @configclass
 class MultiTaskRewardCfg:
-    """CTS-MoE task assignment settings and dispatcher-level reward terms."""
+    """CTS-MoE terrain task assignment settings and dispatcher-level reward terms."""
 
     # Dispatcher-level alive bonus added to every task after marked rewards are computed.
     alive_weight: float = 0.1
@@ -854,7 +919,6 @@ class MultiTaskRewardCfg:
     fixed_task_assignment: bool = True
     fixed_task_id: int | None = None
     task_sampling_weights: list[float] | None = None
-    enable_box_avoidance: bool = True
 
 
 @configclass
@@ -890,7 +954,7 @@ class TerminationsCfg:
 class CurriculumCfg:
     """Curriculum terms for the MDP."""
 
-    # terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
+    terrain_levels = CurrTerm(func=mdp.terrain_levels_vel)
     # flat_ori_modify = CurrTerm(func=mdp.modify_reward_weight,
     #                            params={"term_name": "flat_orientation_l2",
     #                                    "num_steps": 3500,

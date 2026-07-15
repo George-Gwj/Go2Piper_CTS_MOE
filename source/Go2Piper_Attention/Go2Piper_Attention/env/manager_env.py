@@ -9,16 +9,18 @@ from . import local_manager
 class ManagerRLEnv(ManagerBasedRLEnv):
     """Configuration for the locomotion velocity-tracking environment."""
 
-    TASK_BOX_AVOIDANCE = 0
-    TASK_UNDER_TABLE = 1
-    TASK_STAIR_UP = 2
-    TASK_FLAT = 3
-    NUM_TASKS = 4
+    TASK_FLAT = 0
+    TASK_ASCEND = 1
+    TASK_DESCEND = 2
+    TASK_FLOATING_RING = 3
+    TASK_ROUGH = 4
+    NUM_TASKS = 5
     TASK_NAMES = (
-        "box_avoidance",
-        "under_table",
-        "stair_up",
         "flat",
+        "ascend",
+        "descend",
+        "floating_ring",
+        "rough",
     )
 
     def __init__(self, cfg, render_mode, **kwargs):
@@ -171,13 +173,8 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         self.task_id = task_id
         self._refresh_task_masks()
 
-    def _is_box_avoidance_enabled(self) -> bool:
-        return bool(getattr(self.cfg.multi_task_rewards, "enable_box_avoidance", True))
-
     def _enabled_task_ids(self) -> list[int]:
-        if self._is_box_avoidance_enabled():
-            return list(range(self.NUM_TASKS))
-        return [self.TASK_UNDER_TABLE, self.TASK_STAIR_UP, self.TASK_FLAT]
+        return list(range(self.NUM_TASKS))
 
     def _sample_task_ids(self, env_ids: torch.Tensor):
         task_cfg = self.cfg.multi_task_rewards
@@ -203,8 +200,6 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         weights = torch.tensor(task_cfg.task_sampling_weights, dtype=torch.float, device=self.device)
         if weights.numel() != self.NUM_TASKS:
             raise ValueError(f"task_sampling_weights must have length {self.NUM_TASKS}")
-        if not self._is_box_avoidance_enabled():
-            weights[self.TASK_BOX_AVOIDANCE] = 0.0
         if torch.any(weights < 0) or weights.sum() <= 0:
             raise ValueError("task_sampling_weights must be non-negative and have positive sum")
         probabilities = weights / weights.sum()
@@ -214,14 +209,14 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _validate_task_id(self, task_id: int):
         if task_id < 0 or task_id >= self.NUM_TASKS:
             raise ValueError(f"fixed_task_id must be in [0, {self.NUM_TASKS - 1}], got {task_id}")
-        if task_id == self.TASK_BOX_AVOIDANCE and not self._is_box_avoidance_enabled():
-            raise ValueError("box_avoidance is disabled via multi_task_rewards.enable_box_avoidance=False")
 
     def _refresh_task_masks(self):
-        self.mask_box = self.task_id == self.TASK_BOX_AVOIDANCE
-        self.mask_under_table = self.task_id == self.TASK_UNDER_TABLE
-        self.mask_stair_up = self.task_id == self.TASK_STAIR_UP
-        self.mask_flat = self.task_id == self.TASK_FLAT
+        task_id = self._context_task_id()
+        self.mask_flat = task_id == self.TASK_FLAT
+        self.mask_ascend = task_id == self.TASK_ASCEND
+        self.mask_descend = task_id == self.TASK_DESCEND
+        self.mask_floating_ring = task_id == self.TASK_FLOATING_RING
+        self.mask_rough = task_id == self.TASK_ROUGH
 
     def _get_rewards(self) -> torch.Tensor:
         reward = torch.zeros(self.num_envs, device=self.device)
@@ -230,34 +225,40 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         )
 
         common_reward, common_logs = self._reward_common()
-        box_reward, box_logs = self._reward_box_avoidance()
-        table_reward, table_logs = self._reward_under_table()
-        stair_up_reward, stair_up_logs = self._reward_stair_up()
         flat_reward, flat_logs = self._reward_flat()
+        ascend_reward, ascend_logs = self._reward_ascend()
+        descend_reward, descend_logs = self._reward_descend()
+        floating_ring_reward, floating_ring_logs = self._reward_floating_ring()
+        rough_reward, rough_logs = self._reward_rough()
 
         reward += common_reward
 
-        mask_box = self.task_id == self.TASK_BOX_AVOIDANCE
-        mask_table = self.task_id == self.TASK_UNDER_TABLE
-        mask_up = self.task_id == self.TASK_STAIR_UP
-        mask_flat = self.task_id == self.TASK_FLAT
+        task_id = self._context_task_id()
+        mask_flat = task_id == self.TASK_FLAT
+        mask_ascend = task_id == self.TASK_ASCEND
+        mask_descend = task_id == self.TASK_DESCEND
+        mask_floating_ring = task_id == self.TASK_FLOATING_RING
+        mask_rough = task_id == self.TASK_ROUGH
 
-        reward[mask_box] += box_reward[mask_box]
-        reward[mask_table] += table_reward[mask_table]
-        reward[mask_up] += stair_up_reward[mask_up]
         reward[mask_flat] += flat_reward[mask_flat]
+        reward[mask_ascend] += ascend_reward[mask_ascend]
+        reward[mask_descend] += descend_reward[mask_descend]
+        reward[mask_floating_ring] += floating_ring_reward[mask_floating_ring]
+        reward[mask_rough] += rough_reward[mask_rough]
 
         self._log_reward_terms(
             common_logs=common_logs,
-            box_logs=box_logs,
-            table_logs=table_logs,
-            stair_up_logs=stair_up_logs,
             flat_logs=flat_logs,
+            ascend_logs=ascend_logs,
+            descend_logs=descend_logs,
+            floating_ring_logs=floating_ring_logs,
+            rough_logs=rough_logs,
             masks={
-                "box": mask_box,
-                "under_table": mask_table,
-                "stair_up": mask_up,
                 "flat": mask_flat,
+                "ascend": mask_ascend,
+                "descend": mask_descend,
+                "floating_ring": mask_floating_ring,
+                "rough": mask_rough,
             },
         )
         return reward
@@ -275,39 +276,6 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         logs["common/alive"] = r_alive
         return reward, logs
 
-    def _reward_box_avoidance(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        reward = self._task_reward_groups["box_avoidance"].clone()
-        logs = {
-            f"box/{name}": value
-            for name, value in self._task_reward_logs["box_avoidance"].items()
-        }
-        placeholder = torch.zeros(self.num_envs, device=self.device)
-        logs["box/placeholder"] = placeholder
-        # TODO: forward progress, obstacle clearance, box collision, center recovery, stuck penalty.
-        return reward, logs
-
-    def _reward_under_table(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        reward = self._task_reward_groups["under_table"].clone()
-        logs = {
-            f"under_table/{name}": value
-            for name, value in self._task_reward_logs["under_table"].items()
-        }
-        placeholder = torch.zeros(self.num_envs, device=self.device)
-        logs["under_table/placeholder"] = placeholder
-        # TODO: low-body posture, overhead clearance, table collision, posture recovery, arm regularization.
-        return reward, logs
-
-    def _reward_stair_up(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-        reward = self._task_reward_groups["stair_up"].clone()
-        logs = {
-            f"stair_up/{name}": value
-            for name, value in self._task_reward_logs["stair_up"].items()
-        }
-        placeholder = torch.zeros(self.num_envs, device=self.device)
-        logs["stair_up/placeholder"] = placeholder
-        # TODO: x/z progress, stair height tracking, foot clearance/placement, stability, collision.
-        return reward, logs
-
     def _reward_flat(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         reward = self._task_reward_groups["flat"].clone()
         logs = {
@@ -317,6 +285,42 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         placeholder = torch.zeros(self.num_envs, device=self.device)
         logs["flat/placeholder"] = placeholder
         # TODO: flat-terrain progress, velocity tracking, stability, obstacle-free locomotion.
+        return reward, logs
+
+    def _reward_ascend(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        reward = self._task_reward_groups["ascend"].clone()
+        logs = {
+            f"ascend/{name}": value
+            for name, value in self._task_reward_logs["ascend"].items()
+        }
+        logs["ascend/placeholder"] = torch.zeros(self.num_envs, device=self.device)
+        return reward, logs
+
+    def _reward_descend(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        reward = self._task_reward_groups["descend"].clone()
+        logs = {
+            f"descend/{name}": value
+            for name, value in self._task_reward_logs["descend"].items()
+        }
+        logs["descend/placeholder"] = torch.zeros(self.num_envs, device=self.device)
+        return reward, logs
+
+    def _reward_floating_ring(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        reward = self._task_reward_groups["floating_ring"].clone()
+        logs = {
+            f"floating_ring/{name}": value
+            for name, value in self._task_reward_logs["floating_ring"].items()
+        }
+        logs["floating_ring/placeholder"] = torch.zeros(self.num_envs, device=self.device)
+        return reward, logs
+
+    def _reward_rough(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        reward = self._task_reward_groups["rough"].clone()
+        logs = {
+            f"rough/{name}": value
+            for name, value in self._task_reward_logs["rough"].items()
+        }
+        logs["rough/placeholder"] = torch.zeros(self.num_envs, device=self.device)
         return reward, logs
 
     def _masked_mean(self, value: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
@@ -369,10 +373,11 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         """Publish per-task command and base-height metrics to extras['log']."""
         per_env_metrics = self._get_per_env_command_metrics()
         task_masks = {
-            "box_avoidance": self.mask_box,
-            "under_table": self.mask_under_table,
-            "stair_up": self.mask_stair_up,
             "flat": self.mask_flat,
+            "ascend": self.mask_ascend,
+            "descend": self.mask_descend,
+            "floating_ring": self.mask_floating_ring,
+            "rough": self.mask_rough,
         }
 
         log: dict[str, torch.Tensor] = {}
@@ -385,42 +390,65 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _log_reward_terms(
         self,
         common_logs: dict[str, torch.Tensor],
-        box_logs: dict[str, torch.Tensor],
-        table_logs: dict[str, torch.Tensor],
-        stair_up_logs: dict[str, torch.Tensor],
         flat_logs: dict[str, torch.Tensor],
+        ascend_logs: dict[str, torch.Tensor],
+        descend_logs: dict[str, torch.Tensor],
+        floating_ring_logs: dict[str, torch.Tensor],
+        rough_logs: dict[str, torch.Tensor],
         masks: dict[str, torch.Tensor],
     ):
         log = {}
         for name, value in common_logs.items():
             log[f"rew/{name}"] = value.mean()
-        for name, value in box_logs.items():
-            log[f"rew/{name}"] = self._masked_mean(value, masks["box"])
-        for name, value in table_logs.items():
-            log[f"rew/{name}"] = self._masked_mean(value, masks["under_table"])
-        for name, value in stair_up_logs.items():
-            log[f"rew/{name}"] = self._masked_mean(value, masks["stair_up"])
         for name, value in flat_logs.items():
             log[f"rew/{name}"] = self._masked_mean(value, masks["flat"])
+        for name, value in ascend_logs.items():
+            log[f"rew/{name}"] = self._masked_mean(value, masks["ascend"])
+        for name, value in descend_logs.items():
+            log[f"rew/{name}"] = self._masked_mean(value, masks["descend"])
+        for name, value in floating_ring_logs.items():
+            log[f"rew/{name}"] = self._masked_mean(value, masks["floating_ring"])
+        for name, value in rough_logs.items():
+            log[f"rew/{name}"] = self._masked_mean(value, masks["rough"])
 
-        log["task/num_box"] = masks["box"].float().sum()
-        log["task/num_under_table"] = masks["under_table"].float().sum()
-        log["task/num_stair_up"] = masks["stair_up"].float().sum()
         log["task/num_flat"] = masks["flat"].float().sum()
+        log["task/num_ascend"] = masks["ascend"].float().sum()
+        log["task/num_descend"] = masks["descend"].float().sum()
+        log["task/num_floating_ring"] = masks["floating_ring"].float().sum()
+        log["task/num_rough"] = masks["rough"].float().sum()
         self._cts_moe_reward_log = log
         self.extras.setdefault("log", {}).update(log)
 
     def _attach_task_id_to_obs(self):
         if isinstance(self.obs_buf, dict):
-            self.obs_buf["task_id"] = self.task_id
+            self.obs_buf["task_id"] = self._context_task_id()
 
     def _publish_task_extras(self):
-        self.extras["task_id"] = self.task_id
-        self.extras["task_names"] = self.TASK_NAMES
+        self.extras["task_id"] = self._context_task_id()
+        self.extras["task_names"] = self._context_task_names()
         if self._cts_moe_enabled:
             self._log_task_metrics()
         self.extras.setdefault("log", {}).update(self._cts_moe_reward_log)
         self.extras.setdefault("log", {}).update(self._cts_moe_task_metrics_log)
+
+    def _context_task_id(self) -> torch.Tensor:
+        terrain = getattr(self.scene, "terrain", None)
+        terrain_cfg = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+        if (
+            terrain is not None
+            and hasattr(terrain, "terrain_types")
+            and terrain_cfg is not None
+            and terrain_cfg.num_cols == len(terrain_cfg.sub_terrains)
+        ):
+            return terrain.terrain_types
+        return self.task_id
+
+    def _context_task_names(self) -> tuple[str, ...]:
+        terrain = getattr(self.scene, "terrain", None)
+        terrain_cfg = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+        if terrain_cfg is not None and terrain_cfg.num_cols == len(terrain_cfg.sub_terrains):
+            return tuple(terrain_cfg.sub_terrains.keys())
+        return self.TASK_NAMES
 
     def _update_reward_buffers(self):
         self.prev_base_pos[:] = self.robot.data.root_pos_w[:, :3]

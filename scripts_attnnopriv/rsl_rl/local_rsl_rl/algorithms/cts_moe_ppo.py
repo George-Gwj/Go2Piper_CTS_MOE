@@ -491,9 +491,13 @@ class CTSMoEPPO:
                 )
                 value_losses = (value_batch - returns_batch).pow(2)
                 value_losses_clipped = (value_clipped - returns_batch).pow(2)
-                value_loss = torch.max(value_losses, value_losses_clipped).mean()
+                per_sample_loss = torch.max(value_losses, value_losses_clipped)
             else:
-                value_loss = (returns_batch - value_batch).pow(2).mean()
+                per_sample_loss = (returns_batch - value_batch).pow(2)
+            if self.value_loss_per_task_average:
+                value_loss = self._reduce_value_loss_per_task(per_sample_loss, task_id_batch)
+            else:
+                value_loss = per_sample_loss.mean()
             return value_loss, {
                 "mean": returns_batch.detach().mean(),
                 "std": returns_batch.detach().std(unbiased=False),

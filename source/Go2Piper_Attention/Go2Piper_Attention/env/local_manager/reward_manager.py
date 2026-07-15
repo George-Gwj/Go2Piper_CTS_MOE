@@ -6,10 +6,11 @@ from Go2Piper_Attention.tasks.manager_based.go2piper_attention.config.agents.rsl
 class RewardManager(RewardManagerBase):
     TASK_REWARD_SUFFIXES = (
         ("common", "_common"),
-        ("box_avoidance", "_box_avoidance"),
-        ("under_table", "_under_table"),
-        ("stair_up", "_stair_up"),
         ("flat", "_flat"),
+        ("ascend", "_ascend"),
+        ("descend", "_descend"),
+        ("floating_ring", "_floating_ring"),
+        ("rough", "_rough"),
     )
 
     def __init__(self,cfg, env):
@@ -75,10 +76,11 @@ class RewardManager(RewardManagerBase):
 
         Reward term names ending with:
         - ``_common`` are used for all tasks.
-        - ``_box_avoidance`` are used only for box-avoidance envs.
-        - ``_under_table`` are used only for under-table envs.
-        - ``_stair_up`` are used only for stair-up envs.
-        - ``_flat`` are used only for flat-terrain envs.
+        - ``_flat`` are used only for flat terrain envs.
+        - ``_ascend`` are used only for ascending stair terrain envs.
+        - ``_descend`` are used only for descending stair terrain envs.
+        - ``_floating_ring`` are used only for floating-ring terrain envs.
+        - ``_rough`` are used only for rough terrain envs.
         """
         grouped_rewards = {
             group: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
