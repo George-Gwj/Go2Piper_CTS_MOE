@@ -889,6 +889,12 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         yield from self.student_encoder.parameters()
 
     def get_action_distribution(self, action_mean: torch.Tensor, action_std: torch.Tensor) -> Normal:
+        if not torch.isfinite(action_mean).all():
+            bad_count = (~torch.isfinite(action_mean)).sum().item()
+            raise ValueError(f"action_mean contains {bad_count} non-finite values before Normal()")
+        if not torch.isfinite(action_std).all():
+            bad_count = (~torch.isfinite(action_std)).sum().item()
+            raise ValueError(f"action_std contains {bad_count} non-finite values before Normal()")
         return Normal(action_mean, action_std)
 
     def encode_teacher(

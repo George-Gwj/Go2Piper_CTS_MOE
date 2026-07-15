@@ -305,7 +305,8 @@ def height_scan(env: ManagerBasedEnv, sensor_cfg: SceneEntityCfg, offset: float 
     sensor: RayCaster = env.scene.sensors[sensor_cfg.name]
     # height scan: height = sensor_height - hit_point_z - offset
 
-    return sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
+    data = sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
+    return torch.nan_to_num(data, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def body_incoming_wrench(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:
@@ -410,7 +411,7 @@ def image(
             mean_tensor = torch.mean(images, dim=(1, 2), keepdim=True)
             images -= mean_tensor
         elif "distance_to" in data_type or "depth" in data_type:
-            images[images == float("inf")] = 0
+            images = torch.nan_to_num(images, nan=0.0, posinf=0.0, neginf=0.0)
 
     return images.clone()
 
@@ -671,4 +672,3 @@ def randomize_base_mass(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneE
     """
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
     return asset.root_physx_view.get_masses()[:, asset_cfg.body_ids].to(env.device)
-

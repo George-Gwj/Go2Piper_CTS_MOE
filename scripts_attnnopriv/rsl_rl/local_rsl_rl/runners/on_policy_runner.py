@@ -67,6 +67,7 @@ class OnPolicyRunner:
         self.tot_time = 0.0
         self.current_learning_iteration = 0
         self.git_status_repos = [local_rsl_rl.__file__]
+        self._nonfinite_obs_counts: dict[str, int] = {}
 
     def _filter_constructor_cfg(self, cls, cfg: dict) -> dict:
         signature = inspect.signature(cls.__init__)
@@ -166,7 +167,17 @@ class OnPolicyRunner:
             self.policy_cfg["student_perception_channels"] = obs["perception"].shape[1]
 
     def _move_obs_to_device(self, obs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-        return {key: value.to(self.device) for key, value in obs.items()}
+        moved_obs = {}
+        for key, value in obs.items():
+            value = value.to(self.device)
+            if torch.is_floating_point(value):
+                finite_mask = torch.isfinite(value)
+                if not finite_mask.all():
+                    bad_count = int((~finite_mask).sum().item())
+                    self._nonfinite_obs_counts[key] = self._nonfinite_obs_counts.get(key, 0) + bad_count
+                    value = torch.nan_to_num(value, nan=0.0, posinf=0.0, neginf=0.0)
+            moved_obs[key] = value
+        return moved_obs
 
     def _init_writer(self):
         if self.log_dir is None or self.writer is not None or self.disable_logs:
@@ -214,6 +225,9 @@ class OnPolicyRunner:
                 self.writer.add_scalar(key, value, it)
             else:
                 self.writer.add_scalar(f"Loss/{key}", value, it)
+        for key, count in self._nonfinite_obs_counts.items():
+            self.writer.add_scalar(f"Diagnostics/nonfinite_obs/{key}", count, it)
+        self._nonfinite_obs_counts.clear()
         self.writer.add_scalar("Loss/learning_rate", self.alg.learning_rate, it)
         self.writer.add_scalar("Policy/mean_noise_std", self.alg.policy.action_std.mean().item(), it)
         self.writer.add_scalar("Perf/total_fps", fps, it)
