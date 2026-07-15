@@ -74,7 +74,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # Rough reward weights:
         # Add RewTerm fields ending with "_rough" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_rough.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_rough.weight = 0.2
+        self.rewards.track_lin_vel_y_exp_rough.weight = 4.0
         self.rewards.track_base_height_exp_rough.weight = 1.0
         self.rewards.lin_vel_z_l2_rough.weight = -2.5
         self.rewards.thigh_contact_rough.weight = -1.0
@@ -86,7 +86,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # Floating-ring reward weights:
         # Add RewTerm fields ending with "_floating_ring" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_floating_ring.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_floating_ring.weight = 0.2
+        self.rewards.track_lin_vel_y_exp_floating_ring.weight = 4.0
         # self.rewards.track_base_height_exp_floating_ring.weight = 0.0
         self.rewards.track_base_height_exp_floating_ring.weight = 2.0
         self.rewards.lin_vel_z_l2_floating_ring.weight = -1.0
@@ -99,7 +99,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # Ascend reward weights:
         # Add RewTerm fields ending with "_ascend" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_ascend.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_ascend.weight = 0.2
+        self.rewards.track_lin_vel_y_exp_ascend.weight = 4.0
         self.rewards.track_base_height_exp_ascend.weight = 1.0
         self.rewards.lin_vel_z_l2_ascend.weight = -0.25
         self.rewards.thigh_contact_ascend.weight = -0.5
@@ -111,7 +111,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # Descend reward weights:
         # Add RewTerm fields ending with "_descend" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_descend.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_descend.weight = 0.2
+        self.rewards.track_lin_vel_y_exp_descend.weight = 4.0
         self.rewards.track_base_height_exp_descend.weight = 1.0
         self.rewards.lin_vel_z_l2_descend.weight = -0.25
         self.rewards.thigh_contact_descend.weight = -0.5
@@ -124,7 +124,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # Flat reward weights:
         # Add RewTerm fields ending with "_flat" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_flat.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_flat.weight = 0.2
+        self.rewards.track_lin_vel_y_exp_flat.weight = 4.0
         self.rewards.track_base_height_exp_flat.weight = 1.0
         self.rewards.lin_vel_z_l2_flat.weight = -2.5
         self.rewards.thigh_contact_flat.weight = -0.5
