@@ -24,15 +24,6 @@ import isaaclab.terrains as terrain_gen
 
 import Go2Piper_Attention.tasks.manager_based.go2piper_attention.mdp as mdp
 from Go2Piper_Attention.tasks.manager_based.go2piper_attention.mdp import leg_observations as leg_obs
-from isaaclab.assets import (
-    Articulation,
-    ArticulationCfg,
-    AssetBaseCfg,
-    RigidObject,
-    RigidObjectCfg,
-    RigidObjectCollection,
-    RigidObjectCollectionCfg,
-)
 
 ##
 # Pre-defined configs
@@ -51,39 +42,67 @@ def cts_moe_task_context(env) -> torch.Tensor:
 # Scene definition
 ##
 
-GO2ARM_TERRAINS_CFG = TerrainGeneratorCfg(
+# GO2ARM_TERRAINS_CFG = TerrainGeneratorCfg(
+#     size=(8.0, 8.0),
+#     border_width=20.0,
+#     num_rows=10,
+#     num_cols=20,
+#     horizontal_scale=0.1,
+#     vertical_scale=0.005,
+#     slope_threshold=0.75,
+#     use_cache=False,
+#     sub_terrains={
+#         "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.4),
+#         "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
+#             proportion=0.6, noise_range=(-0.05, 0.05), noise_step=0.01, border_width=0.25
+#         ),
+#     },
+# )
+CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
+    seed=42,
+    curriculum=True,
     size=(8.0, 8.0),
-    border_width=20.0,
-    num_rows=10,
-    num_cols=20,
-    horizontal_scale=0.1,
+    num_rows=6,
+    num_cols=5,  # 原来如果是 7 类地形，现在加一个 floating_ring，就变成 8 类
+    horizontal_scale=0.05,
     vertical_scale=0.005,
     slope_threshold=0.75,
-    use_cache=False,
+    use_cache=True,
     sub_terrains={
-        "flat": terrain_gen.MeshPlaneTerrainCfg(proportion=0.4),
-        "random_rough": terrain_gen.HfRandomUniformTerrainCfg(
-            proportion=0.6, noise_range=(-0.05, 0.05), noise_step=0.01, border_width=0.25
+        "flat": terrain_gen.MeshPlaneTerrainCfg(
+            proportion=1.0,
+        ),
+
+        "ascend": terrain_gen.HfPyramidStairsTerrainCfg(
+            proportion=1.0,
+            step_height_range=(0.02, 0.22),
+            step_width=0.31,
+            platform_width=2.0,
+        ),
+
+        "descend": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
+            proportion=1.0,
+            step_height_range=(0.02, 0.22),
+            step_width=0.31,
+            platform_width=2.0,
+        ),
+
+        # 新增：悬空方形环 / 镂空四边形障碍物
+        "floating_ring": terrain_gen.MeshFloatingRingTerrainCfg(
+            proportion=1.0,
+            platform_width=2.0,              # 中心 2m × 2m 平台
+            ring_width_range=(0.6, 1.8),     # 环从窄到宽，随 curriculum 增大
+            ring_height_range=(0.45, 0.65),  # 悬空高度，随 difficulty 增大
+            ring_thickness=0.15,             # 环本身厚度
+        ),
+
+        "rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=1.0,
+            noise_range=(0.00, 0.12),
+            noise_step=0.005,
+            downsampled_scale=0.20,
         ),
     },
-)
-
-
-# Kinematic task-scene obstacles: mesh colliders with a kinematic rigid body.
-# ManagerRLEnv repositions them via write_root_state_to_sim() so PhysX collision
-# stays in sync with the robot.
-STATIC_OBSTACLE_RIGID_PROPS = sim_utils.RigidBodyPropertiesCfg(
-    kinematic_enabled=True,
-    disable_gravity=True,
-)
-STATIC_OBSTACLE_COLLISION_PROPS = sim_utils.CollisionPropertiesCfg(
-    collision_enabled=True,
-)
-STATIC_OBSTACLE_PHYSICS_MATERIAL = sim_utils.RigidBodyMaterialCfg(
-    friction_combine_mode="multiply",
-    restitution_combine_mode="multiply",
-    static_friction=1.0,
-    dynamic_friction=1.0,
 )
 
 
@@ -95,7 +114,7 @@ class MySceneCfg(InteractiveSceneCfg):
     terrain = TerrainImporterCfg(
         prim_path="/World/ground",
         terrain_type="generator",
-        terrain_generator=GO2ARM_TERRAINS_CFG,
+        terrain_generator=CTS_MOE_TERRAINS_CFG,
         max_init_terrain_level=5,
         collision_group=-1,
         physics_material=sim_utils.RigidBodyMaterialCfg(
@@ -120,11 +139,7 @@ class MySceneCfg(InteractiveSceneCfg):
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[0.4, 0.3]),
         debug_vis=False,
-        mesh_prim_paths=[
-            "/World/ground",
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True),
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True),
-        ],
+        mesh_prim_paths=["/World/ground"],
     )
 
     contact_forces = ContactSensorCfg(prim_path="{ENV_REGEX_NS}/Robot/.*", history_length=3, track_air_time=True)
@@ -140,13 +155,7 @@ class MySceneCfg(InteractiveSceneCfg):
 
     H_ground_scan = MultiMeshRayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        mesh_prim_paths=[
-            "/World/ground",
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True),
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True),
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/box_obstacle", track_mesh_transforms=True),
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/table_top", track_mesh_transforms=True),
-        ],
+        mesh_prim_paths=["/World/ground"],
         offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.5, 0.0, 3.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
@@ -156,12 +165,7 @@ class MySceneCfg(InteractiveSceneCfg):
 
     H_lateral_scan = MultiMeshRayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        mesh_prim_paths=[
-            "/World/ground",
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True),
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True),
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/box_obstacle", track_mesh_transforms=True),
-        ],
+        mesh_prim_paths=["/World/ground"],
         offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.5, 0.0, 3.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
@@ -171,12 +175,7 @@ class MySceneCfg(InteractiveSceneCfg):
 
     H_overhead_scan = MultiMeshRayCasterCfg(
         prim_path="{ENV_REGEX_NS}/Robot/base",
-        mesh_prim_paths=[
-            "/World/ground",
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True),
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True),
-            MultiMeshRayCasterCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/table_top", track_mesh_transforms=True),
-        ],
+        mesh_prim_paths=["/World/ground"],
         offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.5, 0.0, 3.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
@@ -192,20 +191,7 @@ class MySceneCfg(InteractiveSceneCfg):
         # 只保留当前帧
         history_length=0,
         debug_vis=False,
-        mesh_prim_paths=[
-            "/World/ground",
-            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(
-                prim_expr="{ENV_REGEX_NS}/stair_step_*", track_mesh_transforms=True
-            ),
-            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(
-                prim_expr="{ENV_REGEX_NS}/stair_platform", track_mesh_transforms=True
-            ),
-            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/table_top", track_mesh_transforms=True),
-            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(prim_expr="{ENV_REGEX_NS}/table_leg_*", track_mesh_transforms=True),
-            MultiMeshRayCasterCameraCfg.RaycastTargetCfg(
-                prim_expr="{ENV_REGEX_NS}/box_obstacle", track_mesh_transforms=True
-            ),
-        ],
+        mesh_prim_paths=["/World/ground"],
         pattern_cfg=patterns.PinholeCameraPatternCfg(
             # 保留你原来的 focal_length 数值，只重新计算 aperture 来匹配 87° × 58°
             # horizontal_aperture = 2 * f * tan(87° / 2) = 3.4353
@@ -230,140 +216,6 @@ class MySceneCfg(InteractiveSceneCfg):
             rot=(0.3535533906, -0.6123724357, 0.6123724357, -0.3535533906),  # quaternion: w, x, y, z
         ),
     )
-
-    # Task-specific kinematic scene objects. They are spawned once for every env and then
-    # moved by ManagerRLEnv via write_root_state_to_sim(). Runtime scale is avoided
-    # because MultiMeshRayCaster caches mesh vertices at initialization.
-    box_obstacle = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/box_obstacle",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.5, 0.5, 0.65),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.85, 0.10, 0.08), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-
-    table_top = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/table_top",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(2.0, 1.4, 0.08),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=sim_utils.CollisionPropertiesCfg(
-                collision_enabled=False,
-            ),
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.30, 0.85), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    table_leg_0 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/table_leg_0",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.06, 0.06, 0.55),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.30, 0.85), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    table_leg_1 = table_leg_0.replace(prim_path="{ENV_REGEX_NS}/table_leg_1")
-    table_leg_2 = table_leg_0.replace(prim_path="{ENV_REGEX_NS}/table_leg_2")
-    table_leg_3 = table_leg_0.replace(prim_path="{ENV_REGEX_NS}/table_leg_3")
-
-    stair_step_0 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/stair_step_0",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.05),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    stair_step_1 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/stair_step_1",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.1),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    stair_step_2 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/stair_step_2",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.15),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    stair_step_3 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/stair_step_3",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.2),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    stair_step_4 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/stair_step_4",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.25),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    stair_step_5 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/stair_step_5",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.3),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    stair_step_6 = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/stair_step_6",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(0.35, 3.0, 0.35),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-    stair_platform = RigidObjectCfg(
-        prim_path="{ENV_REGEX_NS}/stair_platform",
-        spawn=sim_utils.MeshCuboidCfg(
-            size=(5.0, 3.0, 0.35),
-            rigid_props=STATIC_OBSTACLE_RIGID_PROPS,
-            collision_props=STATIC_OBSTACLE_COLLISION_PROPS,
-            physics_material=STATIC_OBSTACLE_PHYSICS_MATERIAL,
-            visual_material=sim_utils.PreviewSurfaceCfg(diffuse_color=(0.10, 0.65, 0.20), metallic=0.0),
-        ),
-        init_state=RigidObjectCfg.InitialStateCfg(pos=(0.0, 0.0, -10.0)),
-    )
-
-                    
 
 @configclass
 class EventCfg:
@@ -723,33 +575,8 @@ class RewardsCfg:
                  "std": 0.02}
     )
 
-    forward_progress_stair_up = RewTerm(
-        func=mdp.stair_up_forward_progress,
-        weight=0.0,
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "first_step_object_name": "stair_step_0",
-            "step_depth": 0.35,
-            "num_steps": 7,
-            "approach_margin": 0.4,
-            "platform_margin": 0.7,
-        },
-    )
-
-    base_height_progress_stair_up = RewTerm(
-        func=mdp.stair_up_base_height_progress,
-        weight=0.0,
-        params={
-            "desired_base_clearance": 0.3,
-            "std": 0.06,
-            "asset_cfg": SceneEntityCfg("robot"),
-            "first_step_object_name": "stair_step_0",
-            "step_depth": 0.35,
-            "step_height": 0.05,
-            "num_steps": 7,
-            "approach_margin": 0.2,
-        },
-    )
+    forward_progress_stair_up = None
+    base_height_progress_stair_up = None
 
     track_base_height_exp_flat = RewTerm(
         func=mdp.base_height_tracking, 
@@ -1028,9 +855,6 @@ class MultiTaskRewardCfg:
     fixed_task_id: int | None = None
     task_sampling_weights: list[float] | None = None
     enable_box_avoidance: bool = True
-    stair_step_height: float = 0.05
-    stair_step_depth: float = 0.35
-    stair_num_steps: int = 7
 
 
 @configclass
@@ -1100,7 +924,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=10.0)
+    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=8.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()

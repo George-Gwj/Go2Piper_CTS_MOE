@@ -20,22 +20,6 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         "stair_up",
         "flat",
     )
-    TASK_SCENE_OBJECT_NAMES = (
-        "box_obstacle",
-        "table_top",
-        "table_leg_0",
-        "table_leg_1",
-        "table_leg_2",
-        "table_leg_3",
-        "stair_step_0",
-        "stair_step_1",
-        "stair_step_2",
-        "stair_step_3",
-        "stair_step_4",
-        "stair_step_5",
-        "stair_step_6",
-        "stair_platform",
-    )
 
     def __init__(self, cfg, render_mode, **kwargs):
         super().__init__(cfg=cfg)
@@ -45,7 +29,6 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         if self._cts_moe_enabled:
             self.robot = self.scene["robot"]
             self._assign_env_tasks()
-            self._setup_task_scenes()
             self.prev_base_pos = torch.zeros(self.num_envs, 3, device=self.device)
             self.prev_base_pos[:] = self.robot.data.root_pos_w[:, :3]
             self._cts_moe_task_metrics_log: dict[str, torch.Tensor] = {}
@@ -158,7 +141,6 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         if not task_cfg.fixed_task_assignment:
             self._sample_task_ids(env_ids)
             self._refresh_task_masks()
-        self._reset_task_scene(env_ids)
         self.prev_base_pos[env_ids] = self.robot.data.root_pos_w[env_ids, :3]
 
     def _assign_env_tasks(self):
@@ -240,135 +222,6 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         self.mask_under_table = self.task_id == self.TASK_UNDER_TABLE
         self.mask_stair_up = self.task_id == self.TASK_STAIR_UP
         self.mask_flat = self.task_id == self.TASK_FLAT
-
-    def _setup_task_scenes(self):
-        self._refresh_task_masks()
-        all_env_ids = torch.arange(self.num_envs, dtype=torch.long, device=self.device)
-        self._reset_task_scene(all_env_ids)
-
-    def _reset_task_scene(self, env_ids: torch.Tensor):
-        task_ids = self.task_id[env_ids]
-        box_env_ids = env_ids[task_ids == self.TASK_BOX_AVOIDANCE]
-        table_env_ids = env_ids[task_ids == self.TASK_UNDER_TABLE]
-        stair_up_env_ids = env_ids[task_ids == self.TASK_STAIR_UP]
-        flat_env_ids = env_ids[task_ids == self.TASK_FLAT]
-        self._hide_task_scene_prims(env_ids)
-        if self._is_box_avoidance_enabled():
-            self._randomize_box_scene(box_env_ids)
-        self._randomize_under_table_scene(table_env_ids)
-        self._randomize_stair_up_scene(stair_up_env_ids)
-        # Flat envs deliberately keep all task-scene objects hidden.
-        _ = flat_env_ids
-        self._sync_task_scene_transforms()
-
-    def _sync_task_scene_transforms(self):
-        if hasattr(self, "scene"):
-            self.scene.write_data_to_sim()
-        if hasattr(self, "sim"):
-            self.sim.forward()
-
-    def _hidden_obstacle_positions(self, count: int) -> torch.Tensor:
-        positions = torch.zeros(count, 3, device=self.device)
-        positions[:, 2] = -10.0
-        return positions
-
-    def _set_obstacle_poses(self, object_name: str, env_ids: torch.Tensor, env_local_positions: torch.Tensor):
-        if env_ids.numel() == 0:
-            return
-        root_state = torch.zeros(env_ids.numel(), 13, device=self.device)
-        root_state[:, :3] = env_local_positions + self.scene.env_origins[env_ids]
-        root_state[:, 3] = 1.0
-        self.scene[object_name].write_root_state_to_sim(root_state, env_ids=env_ids)
-
-    def _hide_task_scene_prims(self, env_ids: torch.Tensor):
-        if env_ids.numel() == 0:
-            return
-        hidden_positions = self._hidden_obstacle_positions(env_ids.numel())
-        for name in self.TASK_SCENE_OBJECT_NAMES:
-            self._set_obstacle_poses(name, env_ids, hidden_positions)
-
-    def _randomize_box_scene(self, env_ids: torch.Tensor):
-        if env_ids.numel() == 0:
-            return
-        size_z = 0.65
-        pos_x = torch.empty(env_ids.numel(), device=self.device).uniform_(1.35, 1.65)
-        pos_y = torch.empty(env_ids.numel(), device=self.device).uniform_(-0.35, 0.35)
-        pos_z = torch.full((env_ids.numel(),), size_z / 2.0, device=self.device)
-        positions = torch.stack([pos_x, pos_y, pos_z], dim=-1)
-        self._set_obstacle_poses("box_obstacle", env_ids, positions)
-
-    def _randomize_under_table_scene(self, env_ids: torch.Tensor):
-        if env_ids.numel() == 0:
-            return
-        table_depth_x = 2.0
-        table_span_y = 1.4
-        table_height = 0.6
-        table_x = torch.empty(env_ids.numel(), device=self.device).uniform_(2.2, 2.6)
-        table_y = torch.empty(env_ids.numel(), device=self.device).uniform_(-0.10, 0.10)
-        self._set_obstacle_poses(
-            "table_top",
-            env_ids,
-            torch.stack(
-                [table_x, table_y, torch.full((env_ids.numel(),), table_height, device=self.device)],
-                dim=-1,
-            ),
-        )
-        x_offsets = (-table_depth_x / 2.0 + 0.08, table_depth_x / 2.0 - 0.08)
-        y_offsets = (-table_span_y / 2.0 + 0.08, table_span_y / 2.0 - 0.08)
-        leg_idx = 0
-        for x_offset in x_offsets:
-            for y_offset in y_offsets:
-                self._set_obstacle_poses(
-                    f"table_leg_{leg_idx}",
-                    env_ids,
-                    torch.stack(
-                        [
-                            table_x + x_offset,
-                            table_y + y_offset,
-                            torch.full((env_ids.numel(),), table_height / 2.0, device=self.device),
-                        ],
-                        dim=-1,
-                    ),
-                )
-                leg_idx += 1
-
-    def _randomize_stair_up_scene(self, env_ids: torch.Tensor):
-        if env_ids.numel() == 0:
-            return
-        task_cfg = self.cfg.multi_task_rewards
-        step_height = float(getattr(task_cfg, "stair_step_height", 0.1))
-        step_depth = float(getattr(task_cfg, "stair_step_depth", 0.35))
-        start_x = torch.empty(env_ids.numel(), device=self.device).uniform_(0.85, 1.05)
-        num_steps = int(getattr(task_cfg, "stair_num_steps", 7))
-        platform_length = 5.0
-        for step_idx in range(num_steps):
-            height = step_height * (step_idx + 1)
-            self._set_obstacle_poses(
-                f"stair_step_{step_idx}",
-                env_ids,
-                torch.stack(
-                    [
-                        start_x + step_depth * step_idx,
-                        torch.zeros(env_ids.numel(), device=self.device),
-                        torch.full((env_ids.numel(),), height / 2.0, device=self.device),
-                    ],
-                    dim=-1,
-                ),
-            )
-        platform_height = step_height * num_steps
-        platform_start_x = start_x + (num_steps - 0.5) * step_depth
-        self._set_obstacle_poses(
-            "stair_platform",
-            env_ids,
-            torch.stack(
-                [
-                    platform_start_x + platform_length / 2.0,
-                    torch.zeros(env_ids.numel(), device=self.device),
-                    torch.full((env_ids.numel(),), platform_height / 2.0, device=self.device),
-                ],
-                dim=-1,
-            ),
-        )
 
     def _get_rewards(self) -> torch.Tensor:
         reward = torch.zeros(self.num_envs, device=self.device)

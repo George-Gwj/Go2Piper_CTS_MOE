@@ -9,7 +9,6 @@ from Go2Piper_Attention.tasks.manager_based.go2piper_attention.go2piper_leg_cts_
     LocomotionVelocityEnvCfg,
 )
 from Go2Piper_Attention.assets.go2arm_articulation_cfg import GO2PIPER_CFG
-from Go2Piper_Attention.tasks.manager_based.go2piper_attention.mdp import command_cfg
 
 
 @configclass
@@ -33,8 +32,8 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.events.push_robot = None
 
         # flat terrain 
-        self.scene.terrain.terrain_type = "plane"
-        self.scene.terrain.terrain_generator = None
+        # self.scene.terrain.terrain_type = "plane"
+        # self.scene.terrain.terrain_generator = None
 
         # Temporarily disable box-avoidance task; keep its obstacle underground.
         self.multi_task_rewards.enable_box_avoidance = False
@@ -44,26 +43,13 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         # init
         self.commands.base_velocity.rel_standing_envs = 0.05
         self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
-        self.commands.base_velocity.ranges_init.lin_vel_x  = (0.15, 0.3)
+        self.commands.base_velocity.ranges_init.lin_vel_x  = (0.0, 0.3)
         self.commands.base_velocity.ranges_init.lin_vel_y  = (0.0, 0.0)
         self.commands.base_velocity.ranges_init.ang_vel_z  = (0.0, 0.0)
         # final
-        self.commands.base_velocity.ranges_final.lin_vel_x = (0.3, 0.8)
+        self.commands.base_velocity.ranges_final.lin_vel_x = (0.0, 0.8)
         self.commands.base_velocity.ranges_final.lin_vel_y = (0.0, 0.0)
         self.commands.base_velocity.ranges_final.ang_vel_z = (0.0, 0.0)
-        # Flat task can use a separate command curriculum while other tasks keep the ranges above.
-        self.commands.base_velocity.flat_ranges_init = command_cfg.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.0, 0.3),
-            lin_vel_y=(0.0, 0.0),
-            ang_vel_z=(0.0, 0.0),
-            heading=(-0.0, 0.0),
-        )
-        self.commands.base_velocity.flat_ranges_final = command_cfg.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.0, 0.8),
-            lin_vel_y=(0.0, 0.0),
-            ang_vel_z=(0.0, 0.0),
-            heading=(-0.0, 0.0),
-        )
         
         # Common reward weights.  Reward terms ending with "_common" are used by all tasks.
         self.rewards.track_ang_vel_z_exp_common.weight = 1.0
@@ -117,8 +103,6 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.track_lin_vel_x_exp_stair_up.weight = 4.0
         self.rewards.track_lin_vel_y_exp_stair_up.weight = 0.2
         self.rewards.track_base_height_exp_stair_up.weight = 1.0
-        self.rewards.forward_progress_stair_up.weight = 0.0
-        self.rewards.base_height_progress_stair_up.weight = 0.0
         self.rewards.lin_vel_z_l2_stair_up.weight = -0.25
         self.rewards.thigh_contact_stair_up.weight = -0.5
         self.rewards.calf_contact_stair_up.weight = -0.5
