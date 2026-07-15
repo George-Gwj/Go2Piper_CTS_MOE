@@ -44,7 +44,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.commands.base_velocity.ranges_init.lin_vel_y  = (-0.1, 0.1)
         self.commands.base_velocity.ranges_init.ang_vel_z  = (-0.1, 0.1)
         # final
-        self.commands.base_velocity.ranges_final.lin_vel_x = (0.0, 0.8)
+        self.commands.base_velocity.ranges_final.lin_vel_x = (0.3, 0.8)
         self.commands.base_velocity.ranges_final.lin_vel_y = (-0.5, 0.5)
         self.commands.base_velocity.ranges_final.ang_vel_z = (-0.5, 0.5)
         
