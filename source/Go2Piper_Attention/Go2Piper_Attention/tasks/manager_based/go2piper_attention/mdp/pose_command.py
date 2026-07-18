@@ -136,9 +136,7 @@ class UniformPoseCommand(CommandTerm):
                                     self.robot.data.root_pos_w
         end_effector_curr_pos_b = quat_apply_inverse(self.robot.data.root_state_w[:, 3:7], 
                                                                         end_effector_curr_pos_b)  
-        ee_pos_xy_err = torch.abs( end_effector_curr_pos_b[:, :2] - self.pose_command[:, :2] )
-        ee_pos_z_err =  torch.abs(self.pose_command[:, 2:3] - self.robot.data.body_pos_w[:, self.body_idx][:, 2:3])
-        pos_error = torch.cat([ee_pos_xy_err, ee_pos_z_err], dim=-1)
+        pos_error = torch.abs(end_effector_curr_pos_b[:, :3] - self.pose_command[:, :3])
 
         des_quat_w = quat_mul(self.robot.data.root_state_w[:, 3:7], self.pose_command[:, 3:7])
         curr_quat_w = self.robot.data.body_state_w[:, self.body_idx, 3:7]  # type: ignore
@@ -223,34 +221,27 @@ class UniformPoseCommand(CommandTerm):
                 # print("self.pose_command[i, 1]",self.pose_command[i, 1].shape)
                 # print("z_dis",z_dis.shape)
 
-                # TODO: length_arm Z-axis need to fix 
-                # base limit ( x = 0.35, y = 0.2  z = 0.35 )
-                length_arm = torch.norm(torch.stack([self.pose_command[i, 0], 
-                                                     self.pose_command[i, 1], 
-                                                       ( self.pose_command[i, 2] - torch.clamp(self.robot.data.root_pos_w[i, 2] ,max=0.3) )
-                                                    ])) 
+                length_arm = torch.norm(self.pose_command[i, :3])
                 # max_arm_length = 0.73
-                while((length_arm > 0.7) or 
-                    #   (length_arm < 0.3) or 
-                    #   (self.pose_command[i, 0] < 0.4 and torch.abs(self.pose_command[i, 1]) < 0.2 and self.pose_command[i, 0] < 0.3 )
-                        (self.pose_command[i, 0] < 0.42 and torch.abs(self.pose_command[i, 1]) < 0.2 and self.pose_command[i, 2] < 0.42)
-                     ):
-                        self.pose_command[i, 0] = (r_1.uniform_(*self.cfg.ranges_init.pos_x))  * torch.clamp((1 - count), 0, 1) + \
-                                                        (r_1.uniform_(*self.cfg.ranges_final.pos_x)) * torch.clamp((count), 0, 1) 
-                        self.pose_command[i, 1] = (r_1.uniform_(*self.cfg.ranges_init.pos_y))  * torch.clamp((1 - count), 0, 1) + \
-                                                        (r_1.uniform_(*self.cfg.ranges_final.pos_y)) * torch.clamp((count), 0, 1)
-                        self.pose_command[i, 2] = (r_1.uniform_(*self.cfg.ranges_init.pos_z))  * torch.clamp((1 - count), 0, 1) + \
-                                                         (r_1.uniform_(*self.cfg.ranges_final.pos_z)) * torch.clamp((count), 0, 1)  
+                num_attempts = 0
+                while length_arm > 0.7:
+                    num_attempts += 1
+                    if num_attempts > 100:
+                        self.pose_command[i, :3] = self.pose_command[i, :3] / torch.clamp(length_arm / 0.7, min=1.0)
+                        break
+                    self.pose_command[i, 0] = (r_1.uniform_(*self.cfg.ranges_init.pos_x))  * torch.clamp((1 - count), 0, 1) + \
+                                                    (r_1.uniform_(*self.cfg.ranges_final.pos_x)) * torch.clamp((count), 0, 1) 
+                    self.pose_command[i, 1] = (r_1.uniform_(*self.cfg.ranges_init.pos_y))  * torch.clamp((1 - count), 0, 1) + \
+                                                    (r_1.uniform_(*self.cfg.ranges_final.pos_y)) * torch.clamp((count), 0, 1)
+                    self.pose_command[i, 2] = (r_1.uniform_(*self.cfg.ranges_init.pos_z))  * torch.clamp((1 - count), 0, 1) + \
+                                                     (r_1.uniform_(*self.cfg.ranges_final.pos_z)) * torch.clamp((count), 0, 1)  
            
-                        length_arm = torch.norm(torch.stack([self.pose_command[i, 0], 
-                                                        self.pose_command[i, 1], 
-                                                         ( self.pose_command[i, 2] - torch.clamp(self.robot.data.root_pos_w[i, 2] ,max=0.3) )
-                                                        ])) 
+                    length_arm = torch.norm(self.pose_command[i, :3])
             
 
             delta_x = self.pose_command[env_ids, 0] 
             delta_y = self.pose_command[env_ids, 1] 
-            delta_z = self.pose_command[env_ids, 2]  - ( self.robot.data.root_pos_w[env_ids, 2] + 0.1)
+            delta_z = self.pose_command[env_ids, 2] - 0.1
 
             euler_angles[:, 0] = r.uniform_(*self.cfg.ranges_init.roll) * torch.clamp((1 - count), 0, 1) + \
                                  r.uniform_(*self.cfg.ranges_final.roll) * torch.clamp((count), 0, 1)
@@ -346,4 +337,3 @@ class UniformPoseCommand(CommandTerm):
         # -- current body pose
         body_pose_w = self.robot.data.body_state_w[:, self.body_idx]
         self.current_pose_visualizer.visualize(body_pose_w[:, :3], body_pose_w[:, 3:7])
-

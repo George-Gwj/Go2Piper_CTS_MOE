@@ -11,17 +11,17 @@ class Go2PiperCTSMoEPolicyCfg:
     class_name: str = "StructureAwareCTSMoEPolicy"
 
     # Full-body action/proprio dimensions. proprio_dim is expected to include commands.
-    proprio_dim: int = 66
-    privileged_dim: int = 98
+    proprio_dim: int = 67
+    privileged_dim: int = 99
     action_dim: int = 18
 
     # Shared latent/task dimensions.
     latent_dim: int = 32
-    num_tasks: int = 4
+    num_tasks: int = 5
     activation: str = "elu"
 
     # Teacher encoder: MLP(e_t), MLP(h_t), optional c_t, then Linear + LayerNorm.
-    height_channels: int = 3
+    height_channels: int = 1
     teacher_context_dim: int = 0
     teacher_height_flat_dim: int | None = None
     semantic_decoupled_teacher: bool = False
@@ -47,12 +47,12 @@ class Go2PiperCTSMoEPolicyCfg:
     gate_activation: str = "tanh"
 
     # Dense MoE actor. Router uses z only. Orthogonal actor experts output features.
-    num_experts: int = 4
+    num_experts: int = 3
     expert_feature_dim: int = 128
     expert_hidden_dims: list[int] = [256, 128]
     router_hidden_dims: list[int] = [128, 64]
     action_head_hidden_dims: list[int] = [256, 128]
-    expert_names: list[str] = ["lateral_avoidance", "under_table", "stair_up", "flat"]
+    expert_names: list[str] = ["expert_0", "expert_1", "expert_2"]
     use_expert_layernorm: bool = True
     use_moe_output_layernorm: bool = True
     gram_schmidt_eps: float = 1e-6
@@ -90,7 +90,7 @@ class Go2PiperCTSMoEAlgorithmCfg(RslRlPpoAlgorithmCfg):
     entropy_coef: float = 0.005
     num_learning_epochs: int = 5
     num_mini_batches: int = 4
-    learning_rate: float = 1.0e-3
+    learning_rate: float = 3.0e-4
     student_learning_rate: float | None = 1.0e-4
     schedule: str = "adaptive"
     gamma: float = 0.99
@@ -130,18 +130,18 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
 
     num_steps_per_env = 24
     max_iterations = 30000
-    save_interval = 200
+    save_interval = 500
     experiment_name = "go2piper_cts_moe_ortho"
     empirical_normalization = False
     load_checkpoint: str = "CTSMoEOrtho_.*.pt"
 
     policy = Go2PiperCTSMoEPolicyCfg(
-        proprio_dim=66,
-        privileged_dim=98,
+        proprio_dim=67,
+        privileged_dim=99,
         action_dim=18,
         latent_dim=32,
-        num_tasks=4,
-        height_channels=3,
+        num_tasks=5,
+        height_channels=1,
         teacher_privileged_hidden_dims=[512, 256],
         teacher_privileged_feature_dim=32,
         teacher_height_hidden_dims=[512, 256],
@@ -157,14 +157,14 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
         gate_activation="tanh",
-        num_experts=6,
+        num_experts=3,
         expert_names=[
             "expert_0",
             "expert_1",
             "expert_2",
-            "expert_3",
-            "expert_4",
-            "expert_5",
+            # "expert_3",
+            # "expert_4",
+            # "expert_5",
         ],
         expert_feature_dim=128,
         expert_hidden_dims=[256, 128],
@@ -190,7 +190,7 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         entropy_coef=0.005,
         num_learning_epochs=5,
         num_mini_batches=4,
-        learning_rate=1e-3,
+        learning_rate=3e-4,
         schedule="adaptive",
         gamma=0.99,
         lam=0.95,
@@ -199,11 +199,11 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         eps=1e-5,
         student_learning_rate=1e-4,
         distillation_loss_coef=1.0,
-        student_rollout_ratio=0.15,
+        student_rollout_ratio=0.2,
         router_entropy_coef=0.0,
         router_balance_coef=0.0,
         router_logit_l2_coef=0.0,
-        lambda_orth=0.0,
+        lambda_orth=1e-3,
         orth_loss_on="raw",
         per_task_advantage_normalization=True,
         use_popart=True,
@@ -233,18 +233,18 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
 
     num_steps_per_env = 24
     max_iterations = 30000
-    save_interval = 200
+    save_interval = 500
     experiment_name = "go2piper_cts_moe_ortho_teacher"
     empirical_normalization = False
     load_checkpoint: str = "CTSMoEOrthoTeacher_.*.pt"
 
     policy = Go2PiperCTSMoETeacherPolicyCfg(
-        proprio_dim=66,
-        privileged_dim=98,
+        proprio_dim=67,
+        privileged_dim=99,
         action_dim=18,
         latent_dim=32,
-        num_tasks=4,
-        height_channels=3,
+        num_tasks=5,
+        height_channels=1,
         teacher_privileged_hidden_dims=[512, 256],
         teacher_privileged_feature_dim=32,
         teacher_height_hidden_dims=[512, 256],
@@ -260,15 +260,15 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
         gate_activation="tanh",
-        num_experts=6,
+        num_experts=3,
         expert_feature_dim=128,
         expert_names=[
             "expert_0",
             "expert_1",
             "expert_2",
-            "expert_3",
-            "expert_4",
-            "expert_5",
+            # "expert_3",
+            # "expert_4",
+            # "expert_5",
         ],
         expert_hidden_dims=[256, 128],
         router_hidden_dims=[128, 64],
@@ -293,7 +293,7 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
         entropy_coef=0.005,
         num_learning_epochs=5,
         num_mini_batches=4,
-        learning_rate=1e-3,
+        learning_rate=3e-4,
         schedule="adaptive",
         gamma=0.99,
         lam=0.95,
@@ -306,7 +306,7 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
         router_entropy_coef=0.0, # TODO 5e-4
         router_balance_coef=0.0, # TODO 2e-3
         router_logit_l2_coef=0.0,
-        lambda_orth=0.0,
+        lambda_orth=1e-3,
         orth_loss_on="raw",
         per_task_advantage_normalization=True,
         use_popart=True,

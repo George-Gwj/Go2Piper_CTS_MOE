@@ -137,6 +137,28 @@ def resolve_checkpoint_path(args_cli, agent_cfg, log_root_path: str) -> str:
     return get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 
 
+def sync_policy_experts_from_checkpoint(agent_cfg, checkpoint_path: str):
+    """Match play policy expert count to the checkpoint actor architecture."""
+    checkpoint = torch.load(checkpoint_path, weights_only=False, map_location="cpu")
+    state_dict = checkpoint.get("model_state_dict", checkpoint)
+    router_weight = state_dict.get("moe_actor.router.4.weight")
+    if router_weight is None:
+        return
+
+    checkpoint_num_experts = int(router_weight.shape[0])
+    policy_cfg = agent_cfg.policy
+    current_num_experts = int(getattr(policy_cfg, "num_experts", checkpoint_num_experts))
+    if current_num_experts == checkpoint_num_experts:
+        return
+
+    print(
+        "[INFO]: Adjusting play policy num_experts "
+        f"from {current_num_experts} to {checkpoint_num_experts} to match checkpoint."
+    )
+    policy_cfg.num_experts = checkpoint_num_experts
+    policy_cfg.expert_names = [f"expert_{idx}" for idx in range(checkpoint_num_experts)]
+
+
 @hydra_task_config(args_cli.task, args_cli.agent)
 def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agent_cfg: Go2PiperCTSMoERunnerCfg):
     task_name = args_cli.task.split(":")[-1]
@@ -155,6 +177,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     print(f"[INFO] Loading experiment from directory: {log_root_path}")
 
     resume_path = resolve_checkpoint_path(args_cli, agent_cfg, log_root_path)
+    sync_policy_experts_from_checkpoint(agent_cfg, resume_path)
     inference_mode = resolve_inference_mode(args_cli.options)
     log_dir = os.path.dirname(resume_path)
     print(f"[INFO]: Loading CTS-MoE checkpoint from: {resume_path}")

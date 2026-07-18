@@ -142,6 +142,8 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         super().__post_init__()
         # self.scene.terrain.terrain_type = "plane"
         # self.scene.terrain.terrain_generator = None
+        self.scene.terrain.max_init_terrain_level = self.scene.terrain.terrain_generator.num_rows - 2
+        self.curriculum.terrain_levels = None
 
         # make a smaller scene for play
         self.scene.num_envs = 50

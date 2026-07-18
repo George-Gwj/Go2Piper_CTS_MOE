@@ -32,6 +32,12 @@ class CTSMoERolloutStorage:
         def clear(self):
             self.__init__()
 
+    @staticmethod
+    def _finite(tensor: torch.Tensor) -> torch.Tensor:
+        if torch.is_floating_point(tensor):
+            return torch.nan_to_num(tensor, nan=0.0, posinf=0.0, neginf=0.0)
+        return tensor
+
     def __init__(
         self,
         num_envs: int,
@@ -73,22 +79,22 @@ class CTSMoERolloutStorage:
         if self.step >= self.num_transitions_per_env:
             raise OverflowError("Rollout buffer overflow. Call clear() before adding more transitions.")
 
-        self.proprio[self.step].copy_(transition.proprio)
-        self.height_scan[self.step].copy_(transition.height_scan)
-        self.privileged_obs[self.step].copy_(transition.privileged_obs)
-        self.proprio_history[self.step].copy_(transition.proprio_history)
-        self.perception[self.step].copy_(transition.perception)
+        self.proprio[self.step].copy_(self._finite(transition.proprio))
+        self.height_scan[self.step].copy_(self._finite(transition.height_scan))
+        self.privileged_obs[self.step].copy_(self._finite(transition.privileged_obs))
+        self.proprio_history[self.step].copy_(self._finite(transition.proprio_history))
+        self.perception[self.step].copy_(self._finite(transition.perception))
         self.task_ids[self.step].copy_(transition.task_id.long().view(-1))
         self.student_masks[self.step].copy_(transition.student_mask.bool().view(-1))
 
-        self.actions[self.step].copy_(transition.actions)
-        self.rewards[self.step].copy_(transition.rewards.view(-1, 1))
+        self.actions[self.step].copy_(self._finite(transition.actions))
+        self.rewards[self.step].copy_(self._finite(transition.rewards).view(-1, 1))
         self.dones[self.step].copy_(transition.dones.view(-1, 1).bool())
-        self.values[self.step].copy_(transition.values)
-        self.actions_log_prob[self.step].copy_(transition.actions_log_prob.view(-1, 1))
-        self.mu[self.step].copy_(transition.action_mean)
-        self.sigma[self.step].copy_(transition.action_sigma)
-        self.router_weights[self.step].copy_(transition.router_weights)
+        self.values[self.step].copy_(self._finite(transition.values))
+        self.actions_log_prob[self.step].copy_(self._finite(transition.actions_log_prob).view(-1, 1))
+        self.mu[self.step].copy_(self._finite(transition.action_mean))
+        self.sigma[self.step].copy_(self._finite(transition.action_sigma))
+        self.router_weights[self.step].copy_(self._finite(transition.router_weights))
         self.step += 1
 
     def clear(self):
@@ -102,6 +108,9 @@ class CTSMoERolloutStorage:
         normalize_advantage: bool = True,
         per_task_advantage_normalization: bool = True,
     ):
+        last_values = self._finite(last_values)
+        self.rewards = self._finite(self.rewards)
+        self.values = self._finite(self.values)
         advantage = 0
         for step in reversed(range(self.num_transitions_per_env)):
             next_values = last_values if step == self.num_transitions_per_env - 1 else self.values[step + 1]
@@ -111,6 +120,8 @@ class CTSMoERolloutStorage:
             self.returns[step] = advantage + self.values[step]
 
         self.advantages = self.returns - self.values
+        self.returns = self._finite(self.returns)
+        self.advantages = self._finite(self.advantages)
         if normalize_advantage:
             if per_task_advantage_normalization:
                 self._normalize_advantages_per_task()

@@ -240,10 +240,11 @@ class CTSMoEPPO:
         num_orth_metric_updates = 0
         mean_returns_norm_mean = 0.0
         mean_returns_norm_std = 0.0
+        skipped_nonfinite_updates = 0
 
         if self.use_popart:
             flat_task_ids = self.storage.task_ids.flatten(0, 1)
-            flat_returns = self.storage.returns.flatten(0, 1)
+            flat_returns = self._finite(self.storage.returns.flatten(0, 1))
             old_stats, new_stats = self.popart.update(flat_task_ids, flat_returns)
             if self.popart_use_output_rescale:
                 self._apply_popart_rescale_to_critic_heads(old_stats, new_stats)
@@ -267,6 +268,33 @@ class CTSMoEPPO:
             old_mu_batch,
             old_sigma_batch,
         ) in generator:
+            (
+                proprio_batch,
+                height_scan_batch,
+                privileged_obs_batch,
+                proprio_history_batch,
+                perception_batch,
+                actions_batch,
+                target_values_batch,
+                advantages_batch,
+                returns_batch,
+                old_actions_log_prob_batch,
+                old_mu_batch,
+                old_sigma_batch,
+            ) = self._sanitize_update_batch(
+                proprio_batch,
+                height_scan_batch,
+                privileged_obs_batch,
+                proprio_history_batch,
+                perception_batch,
+                actions_batch,
+                target_values_batch,
+                advantages_batch,
+                returns_batch,
+                old_actions_log_prob_batch,
+                old_mu_batch,
+                old_sigma_batch,
+            )
             forward_kwargs = self._build_forward_kwargs(
                 proprio=proprio_batch,
                 task_id=task_id_batch,
@@ -277,7 +305,13 @@ class CTSMoEPPO:
                 student_mask=student_mask_batch,
                 return_value=True,
             )
-            out = self.policy(**forward_kwargs)
+            try:
+                out = self.policy(**forward_kwargs)
+            except ValueError as exc:
+                if "non-finite" not in str(exc):
+                    raise
+                skipped_nonfinite_updates += 1
+                continue
             dist = out["distribution"]
             actions_log_prob_batch = dist.log_prob(actions_batch).sum(dim=-1)
             entropy_batch = dist.entropy().sum(dim=-1)
@@ -316,9 +350,17 @@ class CTSMoEPPO:
                 + self.lambda_orth * orth_loss
             )
 
+            if not torch.isfinite(ppo_loss):
+                skipped_nonfinite_updates += 1
+                continue
+
             self.optimizer.zero_grad()
             ppo_loss.backward()
-            nn.utils.clip_grad_norm_(list(self.policy.ppo_parameters()), self.max_grad_norm)
+            grad_norm = nn.utils.clip_grad_norm_(list(self.policy.ppo_parameters()), self.max_grad_norm)
+            if not torch.isfinite(grad_norm):
+                self.optimizer.zero_grad(set_to_none=True)
+                skipped_nonfinite_updates += 1
+                continue
             self.optimizer.step()
 
             mean_value_loss += value_loss.item()
@@ -393,6 +435,7 @@ class CTSMoEPPO:
             "router_logit_l2": mean_router_logit_l2_loss / num_updates,
             "orth_loss": mean_orth_loss / num_updates,
             "student_rollout_ratio": self.storage.student_masks.float().mean().item(),
+            "skipped_nonfinite_updates": skipped_nonfinite_updates,
         }
         if num_orth_metric_updates > 0:
             loss_dict.update(
@@ -439,6 +482,15 @@ class CTSMoEPPO:
         student_indices = torch.randperm(num_envs, device=device)[:num_student_envs]
         mask[student_indices] = True
         return mask
+
+    @staticmethod
+    def _finite(tensor: torch.Tensor) -> torch.Tensor:
+        if torch.is_floating_point(tensor):
+            return torch.nan_to_num(tensor, nan=0.0, posinf=0.0, neginf=0.0)
+        return tensor
+
+    def _sanitize_update_batch(self, *batches: torch.Tensor) -> tuple[torch.Tensor, ...]:
+        return tuple(self._finite(batch) for batch in batches)
 
     def _build_forward_kwargs(
         self,
@@ -566,6 +618,8 @@ class CTSMoEPPO:
                 dim=-1,
             )
             kl_mean = torch.mean(kl)
+            if not torch.isfinite(kl_mean):
+                return
             if kl_mean > self.desired_kl * 2.0:
                 self.learning_rate = max(1e-5, self.learning_rate / 1.5)
             elif kl_mean < self.desired_kl / 2.0 and kl_mean > 0.0:

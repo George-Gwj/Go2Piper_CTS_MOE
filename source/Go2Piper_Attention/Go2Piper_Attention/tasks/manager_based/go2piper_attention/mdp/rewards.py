@@ -51,10 +51,8 @@ def position_command_error_exp(env: ManagerBasedRLEnv, command_name: str, std: f
     # print("des_pos_w",des_pos_w[:, :3])
     
     end_effector_curr_pos_b = asset.data.body_pos_w[:, asset_cfg.body_ids[0]] - asset.data.root_pos_w
-    end_effector_curr_pos_b = quat_apply_inverse(asset.data.root_state_w[:, 3:7], end_effector_curr_pos_b)  
-    ee_pos_xy_err = torch.abs( end_effector_curr_pos_b[:, :2] - command[:, :2] )
-    ee_pos_z_err =  torch.abs(command[:, 2:3] - asset.data.body_pos_w[:, asset_cfg.body_ids[0]][:, 2:3]  )
-    pos_error = torch.cat([ee_pos_xy_err, ee_pos_z_err], dim=-1)
+    end_effector_curr_pos_b = quat_apply_inverse(asset.data.root_state_w[:, 3:7], end_effector_curr_pos_b)
+    pos_error = torch.abs(end_effector_curr_pos_b[:, :3] - command[:, :3])
     output = torch.exp(-torch.sum(torch.square(pos_error) / std, dim=1))
 
     # print("--reward--")
@@ -80,10 +78,8 @@ def position_command_error_l2(env: ManagerBasedRLEnv, command_name: str, asset_c
     command = env.command_manager.get_command(command_name)
     # obtain the desired and current positions
     end_effector_curr_pos_b = asset.data.body_pos_w[:, asset_cfg.body_ids[0]] - asset.data.root_pos_w
-    end_effector_curr_pos_b = quat_apply_inverse(asset.data.root_state_w[:, 3:7], end_effector_curr_pos_b)  
-    ee_pos_xy_err = torch.abs( end_effector_curr_pos_b[:, :2] - command[:, :2] )
-    ee_pos_z_err =  torch.abs(command[:, 2:3] - asset.data.body_pos_w[:, asset_cfg.body_ids[0]][:, 2:3]  )
-    pos_error = torch.cat([ee_pos_xy_err, ee_pos_z_err], dim=-1)
+    end_effector_curr_pos_b = quat_apply_inverse(asset.data.root_state_w[:, 3:7], end_effector_curr_pos_b)
+    pos_error = torch.abs(end_effector_curr_pos_b[:, :3] - command[:, :3])
 
     return torch.norm(pos_error, dim=1)
 
@@ -930,6 +926,50 @@ def probe_links_below_height_exp_in_table_region(
         table_object_name=table_object_name,
         table_half_extents_xy=table_half_extents_xy,
         min_table_height_w=min_table_height_w,
+    )
+    return reward * gate
+
+
+def arm_links_below_floating_ring_clearance_exp(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    std: float = 0.05,
+    clearance: float = 0.05,
+    floating_ring_terrain_type: int = 3,
+    platform_width: float = 2.0,
+    ring_width_range: tuple[float, float] = (0.6, 1.8),
+    ring_height_range: tuple[float, float] = (0.45, 0.65),
+    difficulty_range: tuple[float, float] = (0.0, 1.0),
+    margin: float = 0.4,
+) -> torch.Tensor:
+    """Reward keeping arm links below the floating-ring lower surface minus clearance."""
+    terrain = env.scene.terrain
+    if not hasattr(terrain, "terrain_types") or not hasattr(terrain, "terrain_levels"):
+        return torch.zeros(env.num_envs, device=env.device)
+
+    asset: Articulation = env.scene[asset_cfg.name]
+    terrain_levels = terrain.terrain_levels.float()
+    max_level = max(float(getattr(terrain, "max_terrain_level", 1) - 1), 1.0)
+    lower, upper = difficulty_range
+    difficulty = lower + (upper - lower) * torch.clamp(terrain_levels / max_level, 0.0, 1.0)
+
+    # MeshFloatingRingTerrainCfg uses ring_height as the lower surface height.
+    ring_height = ring_height_range[1] - difficulty * (ring_height_range[1] - ring_height_range[0])
+    max_allowed_z = env.scene.env_origins[:, 2] + ring_height - clearance
+
+    arm_link_heights = asset.data.body_pos_w[:, asset_cfg.body_ids, 2]
+    max_arm_link_z = arm_link_heights.max(dim=1).values
+    excess = torch.clamp(max_arm_link_z - max_allowed_z, min=0.0)
+    reward = torch.exp(-excess / std)
+
+    gate = robot_in_floating_ring_region(
+        env,
+        asset_cfg=SceneEntityCfg("robot"),
+        floating_ring_terrain_type=floating_ring_terrain_type,
+        platform_width=platform_width,
+        ring_width_range=ring_width_range,
+        difficulty_range=difficulty_range,
+        margin=margin,
     )
     return reward * gate
 

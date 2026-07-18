@@ -142,10 +142,12 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         super().__post_init__()
         # self.scene.terrain.terrain_type = "plane"
         # self.scene.terrain.terrain_generator = None
+        self.scene.terrain.max_init_terrain_level = self.scene.terrain.terrain_generator.num_rows - 1
+        self.curriculum.terrain_levels = None
 
         # make a smaller scene for play
         self.scene.num_envs = 50
-        self.scene.env_spacing = 10.0
+        self.scene.env_spacing = 8.0
         # disable randomization for play
         self.observations.proprio.enable_corruption = False
         self.observations.proprio_history.enable_corruption = False
