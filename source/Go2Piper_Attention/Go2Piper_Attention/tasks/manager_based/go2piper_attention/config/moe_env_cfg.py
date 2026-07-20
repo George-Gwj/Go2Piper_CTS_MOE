@@ -57,6 +57,7 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
 
         # Common reward weights. Reward terms ending with "_common" are used by all tasks.
         self.rewards.end_effector_position_tracking_exp_common.weight = 1.0
+        self.rewards.end_effector_position_tracking_fine_grained_common.weight = 1.0
         self.rewards.end_effector_action_rate_common.weight = -0.005
         self.rewards.end_effector_action_smoothness_common.weight = -0.02
         self.rewards.end_effector_joint_vel_common.weight = -0.001
@@ -150,14 +151,9 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
     def __post_init__(self) -> None:
         # post init of parent
         super().__post_init__()
-        self.scene.terrain.terrain_generator = CTS_MOE_PLAY_LONG_TERRAINS_CFG
-        self.scene.terrain.max_init_terrain_level = 0
-        self.curriculum.terrain_levels = None
-        self.multi_task_rewards.play_long_terrain = True
-        self.multi_task_rewards.play_long_axis = "y"
 
         # make a smaller scene for play
-        self.scene.num_envs = 1
+        self.scene.num_envs = 50
         self.scene.env_spacing = 8.0
         # disable randomization for play
         self.observations.proprio.enable_corruption = False
@@ -166,7 +162,6 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         # remove random pushing event
         self.events.base_external_force_torque = None
         self.events.push_robot = None
-        self.events.reset_base.params["pose_range"]["yaw"] = (1.57079632679, 1.57079632679)
 
         self.commands.ee_pose.is_Go2ARM = False
         self.commands.base_velocity.is_Go2ARM = False
@@ -184,3 +179,15 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         self.commands.ee_pose.ranges.pos_x = (0.55, 0.55)
         self.commands.ee_pose.ranges.pos_y = (0.0, 0.0)
         self.commands.ee_pose.ranges.pos_z = (0.4, 0.4)
+
+
+class Go2PiperMoEEnvCfg_LONG_PLAY(Go2PiperMoEEnvCfg_PLAY):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.terrain.terrain_generator = CTS_MOE_PLAY_LONG_TERRAINS_CFG
+        self.scene.terrain.max_init_terrain_level = 0
+        self.curriculum.terrain_levels = None
+        self.multi_task_rewards.play_long_terrain = True
+        self.multi_task_rewards.play_long_axis = "y"
+        self.scene.num_envs = 1
+        self.events.reset_base.params["pose_range"]["yaw"] = (1.57079632679, 1.57079632679)

@@ -98,9 +98,7 @@ def position_command_error_tanh(
     # obtain the desired and current positions
     end_effector_curr_pos_b = asset.data.body_pos_w[:, asset_cfg.body_ids[0]] - asset.data.root_pos_w
     end_effector_curr_pos_b = quat_apply_inverse(asset.data.root_state_w[:, 3:7], end_effector_curr_pos_b)  
-    ee_pos_xy_err = torch.abs( end_effector_curr_pos_b[:, :2] - command[:, :2] )
-    ee_pos_z_err =  torch.abs(command[:, 2:3] - asset.data.body_pos_w[:, asset_cfg.body_ids[0]][:, 2:3]  )
-    pos_error = torch.cat([ee_pos_xy_err, ee_pos_z_err], dim=-1)
+    pos_error = torch.abs(end_effector_curr_pos_b[:, :3] - command[:, :3])
     distance = torch.norm(pos_error, dim=1)
     # print("distance",distance)
     # print("output",1 - torch.tanh(distance / std))

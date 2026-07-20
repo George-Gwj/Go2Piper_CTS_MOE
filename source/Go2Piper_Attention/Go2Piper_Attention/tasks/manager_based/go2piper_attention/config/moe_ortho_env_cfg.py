@@ -50,18 +50,18 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.commands.ee_pose.curriculum_coeff = 4000
         self.commands.ee_pose.resampling_time_range = (4.0, 6.0)
         # init
-        self.commands.ee_pose.ranges_init.pos_x = (0.33, 0.38)
+        self.commands.ee_pose.ranges_init.pos_x = (0.4, 0.45)
         self.commands.ee_pose.ranges_init.pos_y = (-0.05, 0.05)
-        self.commands.ee_pose.ranges_init.pos_z = (0.1, 0.2)
+        self.commands.ee_pose.ranges_init.pos_z = (0.15, 0.2)
         self.commands.ee_pose.ranges_init.pitch = (0.0, 3.14 / 4)
         # self.commands.ee_pose.ranges_init.pos_x = (-0.6, 0.6)
         # self.commands.ee_pose.ranges_init.pos_y = (-0.5, 0.5)
         # self.commands.ee_pose.ranges_init.pos_z = (0.55, 0.55)
 
         # final
-        self.commands.ee_pose.ranges_final.pos_x = (0.3, 0.6)
+        self.commands.ee_pose.ranges_final.pos_x = (0.4, 0.6)
         self.commands.ee_pose.ranges_final.pos_y = (-0.15, 0.15)
-        self.commands.ee_pose.ranges_final.pos_z = (0.08, 0.25)
+        self.commands.ee_pose.ranges_final.pos_z = (0.15, 0.25)
         
         self.commands.ee_pose.ranges_final.pitch = (0.0, 3.14 / 4)
         self.commands.ee_pose.ranges.pitch = (3.14 / 4, 3.14 / 4)
@@ -70,7 +70,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         # Common reward weights.  Reward terms ending with "_common" are used by all tasks.
         self.rewards.end_effector_position_tracking_exp_common.weight = 1.0
         # self.rewards.end_effector_position_tracking_l2_common.weight = -0.0
-        # self.rewards.end_effector_position_tracking_fine_grained_common.weight = 2.0
+        self.rewards.end_effector_position_tracking_fine_grained_common.weight = 1.0
         
         self.rewards.end_effector_action_rate_common.weight = -0.005 #-0.005 
         self.rewards.end_effector_action_smoothness_common.weight = -0.02#-0.02
@@ -175,26 +175,24 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         super().__post_init__()
         # self.scene.terrain.terrain_type = "plane"
         # self.scene.terrain.terrain_generator = None
-        self.scene.terrain.terrain_generator = CTS_MOE_PLAY_LONG_TERRAINS_CFG
-        self.scene.terrain.max_init_terrain_level = 0
-        self.curriculum.terrain_levels = None
-        self.multi_task_rewards.play_long_terrain = True
-        self.multi_task_rewards.play_long_axis = "y"
 
         # make a smaller scene for play
-        self.scene.num_envs = 1
+        self.scene.num_envs = 50
         self.scene.env_spacing = 8.0
         # disable randomization for play
         self.observations.proprio.enable_corruption = False
         self.observations.proprio_history.enable_corruption = False
         
+        # terrain difficulty
+        self.scene.terrain.max_init_terrain_level = self.scene.terrain.terrain_generator.num_rows - 1
+        self.curriculum.terrain_levels = None
+
         # self.commands.ee_pose.debug_vis = False
         # self.commands.base_velocity.debug_vis = False
 
         # remove random pushing event
         self.events.base_external_force_torque = None
         self.events.push_robot = None
-        self.events.reset_base.params["pose_range"]["yaw"] = (1.57079632679, 1.57079632679)
 
         # self.events.reset_base = None
         # self.events.reset_base = None
@@ -202,7 +200,7 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         # self.terminations.calf_contact = None
         # self.terminations.thigh_contact = None
 
-
+        self.episode_length_s = 60.0
         self.commands.ee_pose.is_Go2ARM = False
         self.commands.base_velocity.is_Go2ARM = False
   
@@ -213,8 +211,9 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         
         # final
         self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.lin_vel_x = (0.3, 0.8)
+        self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
+        self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
        
         self.commands.ee_pose.resampling_time_range = (1e6, 1e6)
 
@@ -225,3 +224,15 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         # self.commands.ee_pose.ranges.pos_x = (0.5, 0.5)
         # self.commands.ee_pose.ranges.pos_y = (-0.0, 0.0)
         # self.commands.ee_pose.ranges.pos_z = (0.5, 0.5)
+
+
+class Go2PiperMoEOrthoEnvCfg_LONG_PLAY(Go2PiperMoEOrthoEnvCfg_PLAY):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.terrain.terrain_generator = CTS_MOE_PLAY_LONG_TERRAINS_CFG
+        self.scene.terrain.max_init_terrain_level = 0
+        self.curriculum.terrain_levels = None
+        self.multi_task_rewards.play_long_terrain = True
+        self.multi_task_rewards.play_long_axis = "y"
+        self.scene.num_envs = 1
+        self.events.reset_base.params["pose_range"]["yaw"] = (1.57079632679, 1.57079632679)

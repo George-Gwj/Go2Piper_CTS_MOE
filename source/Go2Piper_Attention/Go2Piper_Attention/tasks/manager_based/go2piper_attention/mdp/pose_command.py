@@ -270,7 +270,7 @@ class UniformPoseCommand(CommandTerm):
 
             delta_x = self.pose_command[env_ids, 0] 
             delta_y = self.pose_command[env_ids, 1] 
-            delta_z = self.pose_command[env_ids, 2]  - ( self.robot.data.root_pos_w[env_ids, 2] + 0.1)
+            delta_z = self.pose_command[env_ids, 2] - 0.1
 
             euler_angles[:, 0] = r.uniform_(*self.cfg.ranges.roll)
                                  
