@@ -124,6 +124,57 @@ gym.register(
 
 
 gym.register(
+    id="Go2Piper-Attention-CTS-MoE-No-Ortho",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_no_ortho:Go2PiperCTSMoERunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-No-Ortho-Teacher",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_no_ortho:Go2PiperCTSMoETeacherRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-No-Ortho-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_no_ortho:Go2PiperCTSMoERunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-No-Ortho-Teacher-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_no_ortho:Go2PiperCTSMoETeacherRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-No-Ortho-Teacher-Long-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_LONG_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_no_ortho:Go2PiperCTSMoETeacherRunnerCfg",
+    },
+)
+
+
+gym.register(
     id="Go2Piper-Attention-CTS-MoE-Ortho-CNN",
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
     disable_env_checker=True,
