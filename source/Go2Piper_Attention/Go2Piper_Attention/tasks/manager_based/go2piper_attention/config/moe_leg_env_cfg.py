@@ -6,6 +6,7 @@
 from isaaclab.utils import configclass
 
 from Go2Piper_Attention.tasks.manager_based.go2piper_attention.go2piper_leg_cts_moe_env_cfg import (
+    CTS_MOE_PLAY_LONG_TERRAINS_CFG,
     LocomotionVelocityEnvCfg,
 )
 from Go2Piper_Attention.assets.go2arm_articulation_cfg import GO2PIPER_CFG
@@ -142,11 +143,14 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         super().__post_init__()
         # self.scene.terrain.terrain_type = "plane"
         # self.scene.terrain.terrain_generator = None
-        self.scene.terrain.max_init_terrain_level = self.scene.terrain.terrain_generator.num_rows - 1
+        self.scene.terrain.terrain_generator = CTS_MOE_PLAY_LONG_TERRAINS_CFG
+        self.scene.terrain.max_init_terrain_level = 0
         self.curriculum.terrain_levels = None
+        self.multi_task_rewards.play_long_terrain = True
+        self.multi_task_rewards.play_long_axis = "y"
 
         # make a smaller scene for play
-        self.scene.num_envs = 50
+        self.scene.num_envs = 1
         self.scene.env_spacing = 8.0
         # disable randomization for play
         self.observations.proprio.enable_corruption = False
@@ -157,6 +161,7 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         # remove random pushing event
         self.events.base_external_force_torque = None
         self.events.push_robot = None
+        self.events.reset_base.params["pose_range"]["yaw"] = (1.57079632679, 1.57079632679)
 
         # self.events.reset_base = None
         # self.events.reset_base = None
@@ -167,10 +172,10 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
 
         self.commands.base_velocity.is_Go2ARM = False
         
-        self.commands.base_velocity.resampling_time_range = (1e6, 1e6)
+        self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
         self.commands.base_velocity.rel_standing_envs = 0.1
         
         # final
         self.commands.base_velocity.ranges.lin_vel_x = (0.3, 0.8)
-        self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
-        self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)

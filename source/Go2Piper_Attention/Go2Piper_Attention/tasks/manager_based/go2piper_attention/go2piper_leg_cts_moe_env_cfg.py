@@ -33,6 +33,8 @@ from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG  # isort: skip
 
 def cts_moe_task_context(env) -> torch.Tensor:
     """Terrain context scalar ct as [B, 1], using terrain type ids 0..4."""
+    if hasattr(env, "_context_task_id"):
+        return env._context_task_id().float().unsqueeze(-1)
     terrain = getattr(env.scene, "terrain", None)
     terrain_cfg = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
     if (
@@ -108,6 +110,49 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
         "rough": terrain_gen.HfRandomUniformTerrainCfg(
             proportion=1.0,
             noise_range=(0.00, 0.12),
+            noise_step=0.005,
+            downsampled_scale=0.20,
+        ),
+    },
+)
+
+
+CTS_MOE_PLAY_LONG_TERRAINS_CFG = TerrainGeneratorCfg(
+    seed=42,
+    curriculum=True,
+    size=(8.0, 8.0),
+    num_rows=1,
+    num_cols=5,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=False,
+    sub_terrains={
+        "flat": terrain_gen.MeshPlaneTerrainCfg(
+            proportion=1.0,
+        ),
+        "ascend": terrain_gen.HfPyramidStairsTerrainCfg(
+            proportion=1.0,
+            step_height_range=(0.12, 0.12),
+            step_width=0.31,
+            platform_width=2.0,
+        ),
+        "descend": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
+            proportion=1.0,
+            step_height_range=(0.12, 0.12),
+            step_width=0.31,
+            platform_width=2.0,
+        ),
+        "floating_ring": terrain_gen.MeshFloatingRingTerrainCfg(
+            proportion=1.0,
+            platform_width=2.0,
+            ring_width_range=(1.2, 1.2),
+            ring_height_range=(0.55, 0.55),
+            ring_thickness=0.15,
+        ),
+        "rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=1.0,
+            noise_range=(0.08, 0.08),
             noise_step=0.005,
             downsampled_scale=0.20,
         ),
@@ -919,6 +964,8 @@ class MultiTaskRewardCfg:
     fixed_task_assignment: bool = True
     fixed_task_id: int | None = None
     task_sampling_weights: list[float] | None = None
+    play_long_terrain: bool = False
+    play_long_axis: str = "y"
 
 
 @configclass

@@ -434,6 +434,18 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     def _context_task_id(self) -> torch.Tensor:
         terrain = getattr(self.scene, "terrain", None)
         terrain_cfg = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+        task_cfg = getattr(self.cfg, "multi_task_rewards", None)
+        if (
+            task_cfg is not None
+            and getattr(task_cfg, "play_long_terrain", False)
+            and terrain_cfg is not None
+            and hasattr(self, "robot")
+        ):
+            tile_size = terrain_cfg.size[1] if getattr(task_cfg, "play_long_axis", "y") == "y" else terrain_cfg.size[0]
+            local_pos = self.robot.data.root_pos_w[:, :2] - self.scene.env_origins[:, :2]
+            progress = local_pos[:, 1] if getattr(task_cfg, "play_long_axis", "y") == "y" else local_pos[:, 0]
+            task_id = torch.floor((progress + 0.5 * tile_size) / tile_size).long()
+            return torch.clamp(task_id, 0, self.NUM_TASKS - 1)
         if (
             terrain is not None
             and hasattr(terrain, "terrain_types")

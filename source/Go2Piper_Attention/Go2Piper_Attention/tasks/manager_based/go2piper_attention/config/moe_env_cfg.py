@@ -6,6 +6,7 @@
 from isaaclab.utils import configclass
 
 from Go2Piper_Attention.tasks.manager_based.go2piper_attention.go2piper_cts_moe_env_cfg import (
+    CTS_MOE_PLAY_LONG_TERRAINS_CFG,
     LocomotionVelocityEnvCfg,
 )
 from Go2Piper_Attention.assets.go2arm_articulation_cfg import GO2PIPER_CFG
@@ -149,9 +150,14 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
     def __post_init__(self) -> None:
         # post init of parent
         super().__post_init__()
+        self.scene.terrain.terrain_generator = CTS_MOE_PLAY_LONG_TERRAINS_CFG
+        self.scene.terrain.max_init_terrain_level = 0
+        self.curriculum.terrain_levels = None
+        self.multi_task_rewards.play_long_terrain = True
+        self.multi_task_rewards.play_long_axis = "y"
 
         # make a smaller scene for play
-        self.scene.num_envs = 50
+        self.scene.num_envs = 1
         self.scene.env_spacing = 8.0
         # disable randomization for play
         self.observations.proprio.enable_corruption = False
@@ -160,6 +166,7 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         # remove random pushing event
         self.events.base_external_force_torque = None
         self.events.push_robot = None
+        self.events.reset_base.params["pose_range"]["yaw"] = (1.57079632679, 1.57079632679)
 
         self.commands.ee_pose.is_Go2ARM = False
         self.commands.base_velocity.is_Go2ARM = False
