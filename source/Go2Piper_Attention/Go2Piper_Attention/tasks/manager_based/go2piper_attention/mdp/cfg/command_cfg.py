@@ -38,6 +38,9 @@ class UniformPoseCommandCfg(UniformPoseCommandBaseCfg):
     check pose_command.py for more details
     """
 
+    zero_roll_yaw_command: bool = False
+    """If True, force the generated orientation command to contain only pitch."""
+
     ranges_init: UniformPoseCommandBaseCfg.Ranges = None
     """The initial range"""
 
@@ -82,5 +85,4 @@ class UniformVelocityCommandCfg(UniformVelocityCommandBaseCfg):
 
     flat_ranges_final: UniformVelocityCommandBaseCfg.Ranges | None = None
     """Optional final velocity command range used only by flat-task environments."""
-
 

@@ -66,6 +66,75 @@ def position_command_error_exp(env: ManagerBasedRLEnv, command_name: str, std: f
 
     return output
 
+
+def _local_terrain_height_w(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    terrain_height_mode: str,
+) -> torch.Tensor:
+    sensor = env.scene.sensors[sensor_cfg.name]
+    terrain_heights_w = sensor.data.ray_hits_w[..., 2]
+    valid_hits = torch.isfinite(terrain_heights_w)
+
+    if terrain_height_mode == "mean":
+        safe_heights = torch.where(valid_hits, terrain_heights_w, torch.zeros_like(terrain_heights_w))
+        valid_counts = valid_hits.sum(dim=1).clamp(min=1)
+        return safe_heights.sum(dim=1) / valid_counts
+    if terrain_height_mode == "max":
+        safe_heights = torch.where(valid_hits, terrain_heights_w, torch.full_like(terrain_heights_w, -torch.inf))
+        local_terrain_height_w = torch.max(safe_heights, dim=1).values
+        return torch.where(
+            torch.isfinite(local_terrain_height_w),
+            local_terrain_height_w,
+            torch.zeros_like(local_terrain_height_w),
+        )
+    raise ValueError(f"Unsupported terrain_height_mode: {terrain_height_mode}")
+
+
+def _terrain_type_mask(env: ManagerBasedRLEnv, terrain_type_ids: tuple[int, ...]) -> torch.Tensor:
+    terrain = getattr(env.scene, "terrain", None)
+    if terrain is not None and hasattr(terrain, "terrain_types"):
+        terrain_types = terrain.terrain_types
+    elif hasattr(env, "task_id"):
+        terrain_types = env.task_id
+    else:
+        return torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+
+    mask = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+    for terrain_type_id in terrain_type_ids:
+        mask |= terrain_types == terrain_type_id
+    return mask
+
+
+def position_command_error_exp_terrain_z(
+    env: ManagerBasedRLEnv,
+    command_name: str,
+    std: float,
+    asset_cfg: SceneEntityCfg,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
+    terrain_height_mode: str = "mean",
+    terrain_z_type_ids: tuple[int, ...] = (0, 1, 2, 3, 4),
+) -> torch.Tensor:
+    """Track EE x/y in base frame, but track z as height above local terrain for selected terrain types."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+
+    ee_pos_w = asset.data.body_pos_w[:, asset_cfg.body_ids[0]]
+    ee_pos_b = quat_apply_inverse(asset.data.root_state_w[:, 3:7], ee_pos_w - asset.data.root_pos_w)
+    pos_error = torch.abs(ee_pos_b[:, :3] - command[:, :3])
+
+    terrain_mask = _terrain_type_mask(env, terrain_z_type_ids)
+    if terrain_mask.any():
+        local_terrain_height_w = _local_terrain_height_w(env, sensor_cfg, terrain_height_mode)
+        ee_height_above_terrain = ee_pos_w[:, 2] - local_terrain_height_w
+        pos_error[:, 2] = torch.where(
+            terrain_mask,
+            torch.abs(ee_height_above_terrain - command[:, 2]),
+            pos_error[:, 2],
+        )
+
+    return torch.exp(-torch.sum(torch.square(pos_error) / std, dim=1))
+
 def position_command_error_l2(env: ManagerBasedRLEnv, command_name: str, asset_cfg: SceneEntityCfg) -> torch.Tensor:
     """Penalize tracking of the position error using L2-norm.
 
@@ -102,6 +171,37 @@ def position_command_error_tanh(
     distance = torch.norm(pos_error, dim=1)
     # print("distance",distance)
     # print("output",1 - torch.tanh(distance / std))
+    return 1 - torch.tanh(distance / std)
+
+
+def position_command_error_tanh_terrain_z(
+    env: ManagerBasedRLEnv,
+    std: float,
+    command_name: str,
+    asset_cfg: SceneEntityCfg,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
+    terrain_height_mode: str = "mean",
+    terrain_z_type_ids: tuple[int, ...] = (0, 1, 2, 3, 4),
+) -> torch.Tensor:
+    """Tanh position reward with terrain-relative EE z on selected terrain types."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+
+    ee_pos_w = asset.data.body_pos_w[:, asset_cfg.body_ids[0]]
+    ee_pos_b = quat_apply_inverse(asset.data.root_state_w[:, 3:7], ee_pos_w - asset.data.root_pos_w)
+    pos_error = torch.abs(ee_pos_b[:, :3] - command[:, :3])
+
+    terrain_mask = _terrain_type_mask(env, terrain_z_type_ids)
+    if terrain_mask.any():
+        local_terrain_height_w = _local_terrain_height_w(env, sensor_cfg, terrain_height_mode)
+        ee_height_above_terrain = ee_pos_w[:, 2] - local_terrain_height_w
+        pos_error[:, 2] = torch.where(
+            terrain_mask,
+            torch.abs(ee_height_above_terrain - command[:, 2]),
+            pos_error[:, 2],
+        )
+
+    distance = torch.norm(pos_error, dim=1)
     return 1 - torch.tanh(distance / std)
 
 

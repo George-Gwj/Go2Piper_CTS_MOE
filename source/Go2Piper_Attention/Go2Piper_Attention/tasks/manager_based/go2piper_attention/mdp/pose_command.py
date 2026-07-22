@@ -295,6 +295,10 @@ class UniformPoseCommand(CommandTerm):
             euler_angles[:, 1] = r.uniform_(*self.cfg.ranges.pitch)
             euler_angles[:, 2] = r.uniform_(*self.cfg.ranges.yaw)
 
+        if getattr(self.cfg, "zero_roll_yaw_command", False):
+            euler_angles[:, 0] = 0.0
+            euler_angles[:, 2] = 0.0
+
         quat = quat_from_euler_xyz(euler_angles[:, 0], euler_angles[:, 1], euler_angles[:, 2])
         # make sure the quaternion has real part as positive
         self.pose_command[env_ids, 3:] = quat_unique(quat) if self.cfg.make_quat_unique else quat     

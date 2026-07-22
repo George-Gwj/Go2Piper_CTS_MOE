@@ -36,7 +36,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.commands.base_velocity.curriculum_coeff = 4000
         # init
         self.commands.base_velocity.rel_standing_envs = 0.05
-        self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
+        self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
         self.commands.base_velocity.ranges_init.lin_vel_x  = (0.0, 0.3)
         self.commands.base_velocity.ranges_init.lin_vel_y  = (-0.1, 0.1)
         self.commands.base_velocity.ranges_init.ang_vel_z  = (-0.1, 0.1)
@@ -48,29 +48,37 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
   
         ## position command 
         self.commands.ee_pose.curriculum_coeff = 4000
-        self.commands.ee_pose.resampling_time_range = (4.0, 6.0)
+        self.commands.ee_pose.zero_roll_yaw_command = True
+        self.commands.ee_pose.resampling_time_range = (10.0, 10.0)
         # init
-        self.commands.ee_pose.ranges_init.pos_x = (0.4, 0.45)
+        self.commands.ee_pose.ranges_init.pos_x = (0.33, 0.38)
         self.commands.ee_pose.ranges_init.pos_y = (-0.05, 0.05)
-        self.commands.ee_pose.ranges_init.pos_z = (0.15, 0.2)
-        self.commands.ee_pose.ranges_init.pitch = (0.0, 3.14 / 4)
+        self.commands.ee_pose.ranges_init.pos_z = (0.45, 0.5)
+        self.commands.ee_pose.ranges_init.roll = (0.0, 0.0)
+        self.commands.ee_pose.ranges_init.pitch = (0.0, 0.0)
+        self.commands.ee_pose.ranges_init.yaw = (0.0, 0.0)
         # self.commands.ee_pose.ranges_init.pos_x = (-0.6, 0.6)
         # self.commands.ee_pose.ranges_init.pos_y = (-0.5, 0.5)
         # self.commands.ee_pose.ranges_init.pos_z = (0.55, 0.55)
 
         # final
-        self.commands.ee_pose.ranges_final.pos_x = (0.4, 0.6)
-        self.commands.ee_pose.ranges_final.pos_y = (-0.15, 0.15)
-        self.commands.ee_pose.ranges_final.pos_z = (0.15, 0.25)
+        self.commands.ee_pose.ranges_final.pos_x = (0.45, 0.65)
+        self.commands.ee_pose.ranges_final.pos_y = (-0.2, 0.2)
+        self.commands.ee_pose.ranges_final.pos_z = (0.1, 0.45)
         
-        self.commands.ee_pose.ranges_final.pitch = (0.0, 3.14 / 4)
-        self.commands.ee_pose.ranges.pitch = (3.14 / 4, 3.14 / 4)
+        self.commands.ee_pose.ranges_final.roll = (0.0, 0.0)
+        self.commands.ee_pose.ranges_final.pitch = (0.0, 0.0)
+        self.commands.ee_pose.ranges_final.yaw = (0.0, 0.0)
+        self.commands.ee_pose.ranges.roll = (0.0, 0.0)
+        self.commands.ee_pose.ranges.pitch = (0.0, 0.0)
+        self.commands.ee_pose.ranges.yaw = (0.0, 0.0)
 
         
         # Common reward weights.  Reward terms ending with "_common" are used by all tasks.
         self.rewards.end_effector_position_tracking_exp_common.weight = 1.0
         # self.rewards.end_effector_position_tracking_l2_common.weight = -0.0
         self.rewards.end_effector_position_tracking_fine_grained_common.weight = 1.0
+        self.rewards.end_effector_orientation_tracking.weight = -1.5
         
         self.rewards.end_effector_action_rate_common.weight = -0.005 #-0.005 
         self.rewards.end_effector_action_smoothness_common.weight = -0.02#-0.02
@@ -157,7 +165,6 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.track_lin_vel_x_exp_flat.weight = 4.0
         self.rewards.track_lin_vel_y_exp_flat.weight = 4.0
         self.rewards.track_base_height_exp_flat.weight = 1.0
-        self.rewards.end_effector_orientation_tracking_flat.weight = -0.5
         self.rewards.lin_vel_z_l2_flat.weight = -2.5
         self.rewards.thigh_contact_flat.weight = -0.5
         self.rewards.calf_contact_flat.weight = -0.5
@@ -210,16 +217,16 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         self.commands.base_velocity.rel_standing_envs = 0.1
         
         # final
-        self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
+        self.commands.base_velocity.resampling_time_range = (1e6, 1e6)
         self.commands.base_velocity.ranges.lin_vel_x = (0.3, 0.8)
-        self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
-        self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
+        self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)
        
         self.commands.ee_pose.resampling_time_range = (1e6, 1e6)
 
-        self.commands.ee_pose.ranges.pos_x = (0.55, 0.55)
+        self.commands.ee_pose.ranges.pos_x = (0.5, 0.5)
         self.commands.ee_pose.ranges.pos_y = (0.0, 0.0)
-        self.commands.ee_pose.ranges.pos_z = (0.4, 0.4)
+        self.commands.ee_pose.ranges.pos_z = (0.15, 0.15)
 
         # self.commands.ee_pose.ranges.pos_x = (0.5, 0.5)
         # self.commands.ee_pose.ranges.pos_y = (-0.0, 0.0)

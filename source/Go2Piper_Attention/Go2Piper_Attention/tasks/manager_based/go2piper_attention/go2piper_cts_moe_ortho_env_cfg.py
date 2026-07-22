@@ -84,12 +84,12 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
             proportion=1.0,
             platform_width=2.0,
             ring_width_range=(0.6, 1.8),
-            ring_height_range=(0.45, 0.65),
+            ring_height_range=(0.5, 0.65),
             ring_thickness=0.15,
         ),
         "rough": terrain_gen.HfRandomUniformTerrainCfg(
             proportion=1.0,
-            noise_range=(0.00, 0.12),
+            noise_range=(0.00, 0.08),
             noise_step=0.005,
             downsampled_scale=0.20,
         ),
@@ -473,7 +473,7 @@ class ObservationsCfg:
         ee_pose_commands = ObsTerm(
             func=arm_obs.generated_commands,
             params={"command_name": "ee_pose"},
-        )  # dim = 3
+        )  # dim = 7
         projected_gravity = ObsTerm(
             func=leg_obs.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
@@ -504,7 +504,7 @@ class ObservationsCfg:
             func=arm_obs.generated_commands,
             history_length=5,
             params={"command_name": "ee_pose"},
-        )  # dim = 3
+        )  # dim = 7
         projected_gravity = ObsTerm(
             func=leg_obs.projected_gravity,
             history_length=5,
@@ -535,7 +535,7 @@ class ObservationsCfg:
         ee_pose_commands = ObsTerm(
             func=arm_obs.generated_commands,
             params={"command_name": "ee_pose"},
-        )  # dim = 3
+        )  # dim = 7
         projected_gravity = ObsTerm(func=leg_obs.projected_gravity)  # dim = 3
         leg_joint_torques = ObsTerm(func=leg_obs.get_joints_torques)  # dim = 12
         arm_joint_torques = ObsTerm(func=arm_obs.get_joints_torques)  # dim = 6
@@ -605,24 +605,30 @@ class RewardsCfg:
     # -- ARM 
     # The name must have a prefix of "end_effector_".
     end_effector_position_tracking_exp_common = RewTerm(
-        func=mdp.position_command_error_exp,
+        func=mdp.position_command_error_exp_terrain_z,
         weight=2.5,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
                 "command_name": "ee_pose",
-                "std": 0.1},
+                "std": 0.1,
+                "sensor_cfg": SceneEntityCfg("height_scanner"),
+                "terrain_height_mode": "mean",
+                "terrain_z_type_ids": (0, 1, 2, 3, 4)},
     )
 
     end_effector_position_tracking_fine_grained_common = RewTerm(
-        func=mdp.position_command_error_tanh,
+        func=mdp.position_command_error_tanh_terrain_z,
         weight=2.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
             "std": 0.1,  
             "command_name": "ee_pose",
+            "sensor_cfg": SceneEntityCfg("height_scanner"),
+            "terrain_height_mode": "mean",
+            "terrain_z_type_ids": (0, 1, 2, 3, 4),
         },
     )
 
-    end_effector_orientation_tracking_flat = RewTerm(
+    end_effector_orientation_tracking = RewTerm(
         func=mdp.orientation_command_error,
         weight=0.0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
@@ -1193,7 +1199,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 4
-        self.episode_length_s = 8.0
+        self.episode_length_s = 10.0
         # simulation settings
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
