@@ -11,8 +11,8 @@ class Go2PiperCTSMoEPolicyCfg:
     class_name: str = "StructureAwareCTSMoEPolicy"
 
     # Full-body action/proprio dimensions. proprio_dim is expected to include commands.
-    proprio_dim: int = 67
-    privileged_dim: int = 99
+    proprio_dim: int = 71
+    privileged_dim: int = 103
     action_dim: int = 18
 
     # Shared latent/task dimensions.
@@ -136,8 +136,8 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
     load_checkpoint: str = "CTSMoENoOrtho_.*.pt"
 
     policy = Go2PiperCTSMoEPolicyCfg(
-        proprio_dim=67,
-        privileged_dim=99,
+        proprio_dim=71,
+        privileged_dim=103,
         action_dim=18,
         latent_dim=32,
         num_tasks=5,
@@ -239,8 +239,8 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
     load_checkpoint: str = "CTSMoENoOrthoTeacher_.*.pt"
 
     policy = Go2PiperCTSMoETeacherPolicyCfg(
-        proprio_dim=67,
-        privileged_dim=99,
+        proprio_dim=71,
+        privileged_dim=103,
         action_dim=18,
         latent_dim=32,
         num_tasks=5,

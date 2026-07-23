@@ -628,7 +628,7 @@ class RewardsCfg:
         },
     )
 
-    end_effector_orientation_tracking = RewTerm(
+    end_effector_orientation_tracking_common = RewTerm(
         func=mdp.orientation_command_error,
         weight=0.0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),

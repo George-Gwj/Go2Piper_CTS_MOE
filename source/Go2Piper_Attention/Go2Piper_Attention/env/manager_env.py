@@ -2,6 +2,7 @@ from collections.abc import Sequence
 
 import torch
 from isaaclab.envs import ManagerBasedRLEnv
+from isaaclab.utils.math import quat_apply_inverse
 
 from . import local_manager
 
@@ -332,18 +333,49 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         """Return base height above local terrain for every env."""
         base_height_w = self.robot.data.root_pos_w[:, 2]
         if hasattr(self.scene, "sensors") and "height_scanner" in self.scene.sensors:
-            sensor = self.scene.sensors["height_scanner"]
-            terrain_heights_w = sensor.data.ray_hits_w[..., 2]
-            valid_hits = torch.isfinite(terrain_heights_w)
+            local_terrain_height_w = self._compute_local_terrain_height_w(mode="max")
+            return base_height_w - local_terrain_height_w
+        return base_height_w
+
+    def _compute_local_terrain_height_w(self, mode: str = "mean") -> torch.Tensor:
+        """Return local terrain height from the base-mounted height scanner."""
+        sensor = self.scene.sensors["height_scanner"]
+        terrain_heights_w = sensor.data.ray_hits_w[..., 2]
+        valid_hits = torch.isfinite(terrain_heights_w)
+        if mode == "mean":
+            safe_heights = torch.where(valid_hits, terrain_heights_w, torch.zeros_like(terrain_heights_w))
+            valid_counts = valid_hits.sum(dim=1).clamp(min=1)
+            return safe_heights.sum(dim=1) / valid_counts
+        if mode == "max":
             safe_heights = torch.where(valid_hits, terrain_heights_w, torch.full_like(terrain_heights_w, -torch.inf))
             local_terrain_height_w = torch.max(safe_heights, dim=1).values
-            local_terrain_height_w = torch.where(
+            return torch.where(
                 torch.isfinite(local_terrain_height_w),
                 local_terrain_height_w,
                 torch.zeros_like(local_terrain_height_w),
             )
-            return base_height_w - local_terrain_height_w
-        return base_height_w
+        raise ValueError(f"Unsupported terrain height mode: {mode}")
+
+    def _compute_ee_pose_position_metrics(self, ee_term) -> dict[str, torch.Tensor]:
+        """Return EE position errors in both legacy base-frame and current reward frames."""
+        command = ee_term.command
+        body_idx = ee_term.body_idx
+        ee_pos_w = self.robot.data.body_pos_w[:, body_idx]
+        ee_pos_b = quat_apply_inverse(self.robot.data.root_state_w[:, 3:7], ee_pos_w - self.robot.data.root_pos_w)
+
+        base_frame_error = torch.abs(ee_pos_b[:, :3] - command[:, :3])
+        reward_frame_error = base_frame_error.clone()
+        if hasattr(self.scene, "sensors") and "height_scanner" in self.scene.sensors:
+            local_terrain_height_w = self._compute_local_terrain_height_w(mode="mean")
+            ee_height_above_terrain = ee_pos_w[:, 2] - local_terrain_height_w
+            reward_frame_error[:, 2] = torch.abs(ee_height_above_terrain - command[:, 2])
+
+        return {
+            "ee_pose/position_error": torch.norm(reward_frame_error, dim=-1),
+            "ee_pose/position_error_base_frame": torch.norm(base_frame_error, dim=-1),
+            "ee_pose/position_error_xy_b": torch.norm(base_frame_error[:, :2], dim=-1),
+            "ee_pose/position_error_z_terrain": reward_frame_error[:, 2],
+        }
 
     def _get_per_env_command_metrics(self) -> dict[str, torch.Tensor]:
         """Collect instantaneous command-tracking metrics for each env."""
@@ -351,7 +383,7 @@ class ManagerRLEnv(ManagerBasedRLEnv):
 
         if "ee_pose" in self.command_manager._terms:
             ee_term = self.command_manager.get_term("ee_pose")
-            metrics["ee_pose/position_error"] = ee_term.metrics["position_error"]
+            metrics.update(self._compute_ee_pose_position_metrics(ee_term))
             metrics["ee_pose/orientation_error"] = ee_term.metrics["orientation_error"]
 
         if "base_velocity" in self.command_manager._terms:

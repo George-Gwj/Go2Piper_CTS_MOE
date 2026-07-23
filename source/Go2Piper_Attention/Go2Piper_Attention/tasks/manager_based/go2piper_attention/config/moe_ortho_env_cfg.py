@@ -78,7 +78,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.end_effector_position_tracking_exp_common.weight = 1.0
         # self.rewards.end_effector_position_tracking_l2_common.weight = -0.0
         self.rewards.end_effector_position_tracking_fine_grained_common.weight = 1.0
-        self.rewards.end_effector_orientation_tracking.weight = -1.5
+        self.rewards.end_effector_orientation_tracking_common.weight = -1.5
         
         self.rewards.end_effector_action_rate_common.weight = -0.005 #-0.005 
         self.rewards.end_effector_action_smoothness_common.weight = -0.02#-0.02
