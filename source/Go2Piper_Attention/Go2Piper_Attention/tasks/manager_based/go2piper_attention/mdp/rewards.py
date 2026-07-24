@@ -118,7 +118,7 @@ def _terrain_types(env: ManagerBasedRLEnv) -> torch.Tensor | None:
 def _apply_fixed_terrain_heights(
     env: ManagerBasedRLEnv,
     terrain_height_w: torch.Tensor,
-    fixed_terrain_height_by_type: dict[int, float] | None,
+    fixed_terrain_height_by_type: dict[str, float] | None,
 ) -> torch.Tensor:
     if not fixed_terrain_height_by_type:
         return terrain_height_w
@@ -144,7 +144,7 @@ def position_command_error_exp_terrain_z(
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
     terrain_height_mode: str = "mean",
     terrain_z_type_ids: tuple[int, ...] = (0, 1, 2, 3, 4),
-    fixed_terrain_height_by_type: dict[int, float] | None = None,
+    fixed_terrain_height_by_type: dict[str, float] | None = None,
 ) -> torch.Tensor:
     """Track EE x/y in base frame and EE z above a terrain reference surface."""
     asset: RigidObject = env.scene[asset_cfg.name]
@@ -214,7 +214,7 @@ def position_command_error_tanh_terrain_z(
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
     terrain_height_mode: str = "mean",
     terrain_z_type_ids: tuple[int, ...] = (0, 1, 2, 3, 4),
-    fixed_terrain_height_by_type: dict[int, float] | None = None,
+    fixed_terrain_height_by_type: dict[str, float] | None = None,
 ) -> torch.Tensor:
     """Tanh position reward with EE z above a terrain reference surface."""
     asset: RigidObject = env.scene[asset_cfg.name]
