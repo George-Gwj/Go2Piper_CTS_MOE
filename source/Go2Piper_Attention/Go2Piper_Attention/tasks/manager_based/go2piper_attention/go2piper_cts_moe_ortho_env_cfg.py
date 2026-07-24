@@ -612,7 +612,8 @@ class RewardsCfg:
                 "std": 0.1,
                 "sensor_cfg": SceneEntityCfg("height_scanner"),
                 "terrain_height_mode": "mean",
-                "terrain_z_type_ids": (0, 1, 2, 3, 4)},
+                "terrain_z_type_ids": (0, 1, 2, 3, 4),
+                "fixed_terrain_height_by_type": {3: 0.0, 4: 0.0}},
     )
 
     end_effector_position_tracking_fine_grained_common = RewTerm(
@@ -625,6 +626,7 @@ class RewardsCfg:
             "sensor_cfg": SceneEntityCfg("height_scanner"),
             "terrain_height_mode": "mean",
             "terrain_z_type_ids": (0, 1, 2, 3, 4),
+            "fixed_terrain_height_by_type": {3: 0.0, 4: 0.0},
         },
     )
 

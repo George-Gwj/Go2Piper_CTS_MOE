@@ -106,6 +106,36 @@ def _terrain_type_mask(env: ManagerBasedRLEnv, terrain_type_ids: tuple[int, ...]
     return mask
 
 
+def _terrain_types(env: ManagerBasedRLEnv) -> torch.Tensor | None:
+    terrain = getattr(env.scene, "terrain", None)
+    if terrain is not None and hasattr(terrain, "terrain_types"):
+        return terrain.terrain_types
+    if hasattr(env, "task_id"):
+        return env.task_id
+    return None
+
+
+def _apply_fixed_terrain_heights(
+    env: ManagerBasedRLEnv,
+    terrain_height_w: torch.Tensor,
+    fixed_terrain_height_by_type: dict[int, float] | None,
+) -> torch.Tensor:
+    if not fixed_terrain_height_by_type:
+        return terrain_height_w
+
+    terrain_types = _terrain_types(env)
+    if terrain_types is None:
+        return terrain_height_w
+
+    for terrain_type_id, fixed_height in fixed_terrain_height_by_type.items():
+        terrain_height_w = torch.where(
+            terrain_types == int(terrain_type_id),
+            torch.full_like(terrain_height_w, float(fixed_height)),
+            terrain_height_w,
+        )
+    return terrain_height_w
+
+
 def position_command_error_exp_terrain_z(
     env: ManagerBasedRLEnv,
     command_name: str,
@@ -114,8 +144,9 @@ def position_command_error_exp_terrain_z(
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
     terrain_height_mode: str = "mean",
     terrain_z_type_ids: tuple[int, ...] = (0, 1, 2, 3, 4),
+    fixed_terrain_height_by_type: dict[int, float] | None = None,
 ) -> torch.Tensor:
-    """Track EE x/y in base frame, but track z as height above local terrain for selected terrain types."""
+    """Track EE x/y in base frame and EE z above a terrain reference surface."""
     asset: RigidObject = env.scene[asset_cfg.name]
     command = env.command_manager.get_command(command_name)
 
@@ -126,6 +157,7 @@ def position_command_error_exp_terrain_z(
     terrain_mask = _terrain_type_mask(env, terrain_z_type_ids)
     if terrain_mask.any():
         local_terrain_height_w = _local_terrain_height_w(env, sensor_cfg, terrain_height_mode)
+        local_terrain_height_w = _apply_fixed_terrain_heights(env, local_terrain_height_w, fixed_terrain_height_by_type)
         ee_height_above_terrain = ee_pos_w[:, 2] - local_terrain_height_w
         pos_error[:, 2] = torch.where(
             terrain_mask,
@@ -182,8 +214,9 @@ def position_command_error_tanh_terrain_z(
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
     terrain_height_mode: str = "mean",
     terrain_z_type_ids: tuple[int, ...] = (0, 1, 2, 3, 4),
+    fixed_terrain_height_by_type: dict[int, float] | None = None,
 ) -> torch.Tensor:
-    """Tanh position reward with terrain-relative EE z on selected terrain types."""
+    """Tanh position reward with EE z above a terrain reference surface."""
     asset: RigidObject = env.scene[asset_cfg.name]
     command = env.command_manager.get_command(command_name)
 
@@ -194,6 +227,7 @@ def position_command_error_tanh_terrain_z(
     terrain_mask = _terrain_type_mask(env, terrain_z_type_ids)
     if terrain_mask.any():
         local_terrain_height_w = _local_terrain_height_w(env, sensor_cfg, terrain_height_mode)
+        local_terrain_height_w = _apply_fixed_terrain_heights(env, local_terrain_height_w, fixed_terrain_height_by_type)
         ee_height_above_terrain = ee_pos_w[:, 2] - local_terrain_height_w
         pos_error[:, 2] = torch.where(
             terrain_mask,
