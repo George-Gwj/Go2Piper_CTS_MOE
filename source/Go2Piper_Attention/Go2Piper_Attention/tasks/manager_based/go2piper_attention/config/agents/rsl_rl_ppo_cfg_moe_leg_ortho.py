@@ -110,13 +110,13 @@ class Go2PiperLegCTSMoETeacherRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
         gate_activation="tanh",
-        num_experts=3,
+        num_experts=5,
         expert_names=[
             "expert_0",
             "expert_1",
             "expert_2",
-            # "expert_3",
-            # "expert_4",
+            "expert_3",
+            "expert_4",
             # "expert_5",
         ],
         expert_feature_dim=128,
@@ -138,7 +138,7 @@ class Go2PiperLegCTSMoETeacherRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
     )
 
     algorithm = Go2PiperCTSMoETeacherAlgorithmCfg(
-        router_logit_l2_coef=1e-3,
+        router_logit_l2_coef=1e-4,
     )
 
 
