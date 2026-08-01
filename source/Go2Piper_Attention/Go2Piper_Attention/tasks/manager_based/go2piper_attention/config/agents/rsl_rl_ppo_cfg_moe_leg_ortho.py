@@ -48,7 +48,7 @@ class Go2PiperLegCTSMoERunnerCfg(Go2PiperCTSMoERunnerCfg):
         student_gru_num_layers=1,
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
-        gate_activation="tanh",
+        gate_activation="linear",
         num_experts=5,
         expert_names=[
             "expert_0",
@@ -61,7 +61,9 @@ class Go2PiperLegCTSMoERunnerCfg(Go2PiperCTSMoERunnerCfg):
         expert_feature_dim=128,
         expert_hidden_dims=[256, 128],
         router_hidden_dims=[128, 64],
+        router_input_source="task",
         action_head_hidden_dims=[256, 128],
+        use_task_action_heads=True,
         use_expert_layernorm=True,
         use_moe_output_layernorm=True,
         gram_schmidt_eps=1e-6,
@@ -74,7 +76,9 @@ class Go2PiperLegCTSMoERunnerCfg(Go2PiperCTSMoERunnerCfg):
         activation="elu",
     )
 
-    algorithm = Go2PiperCTSMoEAlgorithmCfg()
+    algorithm = Go2PiperCTSMoEAlgorithmCfg(
+        router_logit_l2_coef=1e-4,
+    )
 
 
 @configclass
@@ -118,7 +122,9 @@ class Go2PiperLegCTSMoETeacherRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
         expert_feature_dim=128,
         expert_hidden_dims=[256, 128],
         router_hidden_dims=[128, 64],
+        router_input_source="task",
         action_head_hidden_dims=[256, 128],
+        use_task_action_heads=True,
         use_expert_layernorm=True,
         use_moe_output_layernorm=True,
         gram_schmidt_eps=1e-6,
@@ -131,7 +137,9 @@ class Go2PiperLegCTSMoETeacherRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
         activation="elu",
     )
 
-    algorithm = Go2PiperCTSMoETeacherAlgorithmCfg()
+    algorithm = Go2PiperCTSMoETeacherAlgorithmCfg(
+        router_logit_l2_coef=1e-3,
+    )
 
 
 @configclass

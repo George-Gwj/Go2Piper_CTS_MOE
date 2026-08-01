@@ -21,6 +21,26 @@ class Go2PiperLegCTSMoETeacherPolicyCfg(Go2PiperCTSMoETeacherPolicyCfg):
 
 
 @configclass
+class Go2PiperLegCTSMoEAlgorithmCfg(Go2PiperCTSMoEAlgorithmCfg):
+    """Algorithm config for leg-only CTS-MoE with anti-collapse router regularization."""
+
+    router_entropy_coef: float = 5.0e-4
+    router_balance_coef: float = 2.0e-3
+    router_logit_l2_coef: float = 1.0e-4
+    lambda_orth: float = 0.0
+
+
+@configclass
+class Go2PiperLegCTSMoETeacherAlgorithmCfg(Go2PiperCTSMoETeacherAlgorithmCfg):
+    """Teacher-only leg CTS-MoE config with anti-collapse router regularization."""
+
+    router_entropy_coef: float = 5.0e-4
+    router_balance_coef: float = 2.0e-3
+    router_logit_l2_coef: float = 1.0e-4
+    lambda_orth: float = 0.0
+
+
+@configclass
 class Go2PiperLegCTSMoERunnerCfg(Go2PiperCTSMoEOrthoRunnerCfg):
     """Runner config for leg-only action-level CTS-MoE training."""
 
@@ -48,7 +68,7 @@ class Go2PiperLegCTSMoERunnerCfg(Go2PiperCTSMoEOrthoRunnerCfg):
         student_gru_num_layers=1,
         actor_type="cts_moe",
         orthogonal_mode="none",
-        gate_activation="tanh",
+        gate_activation="softmax",
         num_experts=5,
         expert_names=[
             "expert_0",
@@ -74,7 +94,7 @@ class Go2PiperLegCTSMoERunnerCfg(Go2PiperCTSMoEOrthoRunnerCfg):
         activation="elu",
     )
 
-    algorithm = Go2PiperCTSMoEAlgorithmCfg()
+    algorithm = Go2PiperLegCTSMoEAlgorithmCfg()
 
 
 @configclass
@@ -105,7 +125,7 @@ class Go2PiperLegCTSMoETeacherRunnerCfg(Go2PiperCTSMoEOrthoTeacherRunnerCfg):
         student_gru_num_layers=1,
         actor_type="cts_moe",
         orthogonal_mode="none",
-        gate_activation="tanh",
+        gate_activation="softmax",
         num_experts=3,
         expert_names=[
             "expert_0",
@@ -131,7 +151,7 @@ class Go2PiperLegCTSMoETeacherRunnerCfg(Go2PiperCTSMoEOrthoTeacherRunnerCfg):
         activation="elu",
     )
 
-    algorithm = Go2PiperCTSMoETeacherAlgorithmCfg()
+    algorithm = Go2PiperLegCTSMoETeacherAlgorithmCfg()
 
 
 Go2PiperCTSMoERunnerCfg = Go2PiperLegCTSMoERunnerCfg

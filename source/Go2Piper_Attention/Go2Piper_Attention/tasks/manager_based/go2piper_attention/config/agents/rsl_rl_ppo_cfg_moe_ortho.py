@@ -51,7 +51,9 @@ class Go2PiperCTSMoEPolicyCfg:
     expert_feature_dim: int = 128
     expert_hidden_dims: list[int] = [256, 128]
     router_hidden_dims: list[int] = [128, 64]
+    router_input_source: str = "latent"
     action_head_hidden_dims: list[int] = [256, 128]
+    use_task_action_heads: bool = False
     expert_names: list[str] = ["expert_0", "expert_1", "expert_2"]
     use_expert_layernorm: bool = True
     use_moe_output_layernorm: bool = True

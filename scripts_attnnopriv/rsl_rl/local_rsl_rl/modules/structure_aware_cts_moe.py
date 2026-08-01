@@ -510,6 +510,9 @@ class OrthogonalMoEActor(nn.Module):
         router_hidden_dims: Sequence[int] = (128, 64),
         action_head_hidden_dims: Sequence[int] = (128,),
         expert_names: Sequence[str] | None = None,
+        num_tasks: int = 4,
+        router_input_source: str = "latent",
+        use_task_action_heads: bool = False,
         orthogonal_mode: str = "gram_schmidt",
         gate_activation: str = "softmax",
         use_expert_layernorm: bool = True,
@@ -531,10 +534,15 @@ class OrthogonalMoEActor(nn.Module):
         self.proprio_dim = proprio_dim
         self.action_dim = action_dim
         self.num_experts = num_experts
+        self.num_tasks = num_tasks
+        self.router_input_source = router_input_source
+        self.use_task_action_heads = use_task_action_heads
         self.expert_feature_dim = expert_feature_dim
         self.orthogonal_mode = orthogonal_mode
         self.gate_activation = gate_activation
         self.gram_schmidt_eps = gram_schmidt_eps
+        if router_input_source not in ("latent", "task"):
+            raise ValueError("router_input_source must be 'latent' or 'task'")
 
         if expert_names is None:
             expert_names = self.DEFAULT_EXPERT_NAMES[:num_experts]
@@ -556,19 +564,33 @@ class OrthogonalMoEActor(nn.Module):
             nn.LayerNorm(expert_feature_dim) if use_expert_layernorm else nn.Identity()
             for _ in range(num_experts)
         )
+        router_input_dim = latent_dim if router_input_source == "latent" else num_tasks
         self.router = build_mlp(
-            latent_dim,
+            router_input_dim,
             hidden_dims=router_hidden_dims,
             output_dim=num_experts,
             activation=activation,
         )
         self.moe_output_norm = nn.LayerNorm(expert_feature_dim) if use_moe_output_layernorm else nn.Identity()
-        self.action_head = build_mlp(
-            expert_feature_dim,
-            hidden_dims=action_head_hidden_dims,
-            output_dim=action_dim,
-            activation=activation,
-        )
+        if use_task_action_heads:
+            self.action_heads = nn.ModuleList(
+                build_mlp(
+                    expert_feature_dim,
+                    hidden_dims=action_head_hidden_dims,
+                    output_dim=action_dim,
+                    activation=activation,
+                )
+                for _ in range(num_tasks)
+            )
+            self.action_head = None
+        else:
+            self.action_head = build_mlp(
+                expert_feature_dim,
+                hidden_dims=action_head_hidden_dims,
+                output_dim=action_dim,
+                activation=activation,
+            )
+            self.action_heads = None
 
     def _check_inputs(self, z: torch.Tensor, proprio: torch.Tensor) -> None:
         if z.dim() != 2 or z.shape[-1] != self.latent_dim:
@@ -591,14 +613,48 @@ class OrthogonalMoEActor(nn.Module):
             return gate_logits / (gate_logits.norm(dim=-1, keepdim=True) + self.gram_schmidt_eps)
         raise ValueError(f"Unknown gate_activation: {self.gate_activation}")
 
+    def _task_id_from_proprio(self, proprio: torch.Tensor) -> torch.Tensor:
+        return torch.round(proprio[:, -1]).long().clamp(min=0, max=self.num_tasks - 1)
+
+    def _router_input(self, z: torch.Tensor, proprio: torch.Tensor) -> torch.Tensor:
+        if self.router_input_source == "latent":
+            return z
+
+        task_id = self._task_id_from_proprio(proprio)
+        return F.one_hot(task_id, num_classes=self.num_tasks).to(dtype=proprio.dtype)
+
+    def _action_from_feature(self, feature: torch.Tensor, task_id: torch.Tensor) -> torch.Tensor:
+        if self.action_head is not None:
+            return self.action_head(feature)
+
+        all_actions = torch.stack([head(feature) for head in self.action_heads], dim=1)
+        batch_idx = torch.arange(feature.shape[0], device=feature.device)
+        return all_actions[batch_idx, task_id]
+
+    def _expert_actions_from_features(self, features: torch.Tensor, task_id: torch.Tensor) -> torch.Tensor:
+        normalized_features = self.moe_output_norm(features)
+        if self.action_head is not None:
+            return self.action_head(normalized_features)
+
+        batch_size, num_experts, feature_dim = normalized_features.shape
+        flat_features = normalized_features.reshape(batch_size * num_experts, feature_dim)
+        all_actions = torch.stack(
+            [head(flat_features).view(batch_size, num_experts, self.action_dim) for head in self.action_heads],
+            dim=1,
+        )
+        batch_idx = torch.arange(batch_size, device=features.device)
+        return all_actions[batch_idx, task_id]
+
     def forward(
         self,
         z: torch.Tensor,
         proprio: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
         self._check_inputs(z, proprio)
+        task_id = self._task_id_from_proprio(proprio)
         actor_input = torch.cat([z, proprio], dim=-1)
-        router_logits = self.router(z)
+        router_input = self._router_input(z, proprio)
+        router_logits = self.router(router_input)
         gate_coeffs = self.apply_gate_activation(router_logits)
 
         expert_features_raw = torch.stack(
@@ -614,13 +670,15 @@ class OrthogonalMoEActor(nn.Module):
 
         mixed_feature = torch.sum(gate_coeffs.unsqueeze(-1) * expert_features_orth, dim=1)
         mixed_feature = self.moe_output_norm(mixed_feature)
-        action_mean = self.action_head(mixed_feature)
-        expert_actions = self.action_head(self.moe_output_norm(expert_features_orth))
+        action_mean = self._action_from_feature(mixed_feature, task_id)
+        expert_actions = self._expert_actions_from_features(expert_features_orth, task_id)
         extras = {
             "gate_logits": router_logits,
             "gate_coeffs": gate_coeffs,
             "gate_weights": gate_coeffs,
             "gate_activation": self.gate_activation,
+            "router_input": router_input,
+            "actor_task_id": task_id,
             "expert_features_raw": expert_features_raw,
             "expert_features_orth": expert_features_orth,
             "mixed_feature": mixed_feature,
@@ -773,6 +831,8 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         router_hidden_dims: Sequence[int] = (128, 64),
         action_head_hidden_dims: Sequence[int] = (128,),
         expert_names: Sequence[str] | None = None,
+        router_input_source: str = "latent",
+        use_task_action_heads: bool = False,
         orthogonal_mode: str = "gram_schmidt",
         gate_activation: str = "softmax",
         use_expert_layernorm: bool = True,
@@ -837,6 +897,9 @@ class StructureAwareCTSMoEPolicy(nn.Module):
                 router_hidden_dims=router_hidden_dims,
                 action_head_hidden_dims=action_head_hidden_dims,
                 expert_names=expert_names,
+                num_tasks=num_tasks,
+                router_input_source=router_input_source,
+                use_task_action_heads=use_task_action_heads,
                 orthogonal_mode=orthogonal_mode,
                 gate_activation=gate_activation,
                 use_expert_layernorm=use_expert_layernorm,
