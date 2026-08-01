@@ -763,6 +763,31 @@ def feet_long_air_penalty(
     penalty = torch.sum(torch.square(excess), dim=1)  # (N,)
     return penalty
 
+
+def feet_long_contact_penalty(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    max_contact_time: float = 0.5,
+    command_name: str | None = None,
+    command_threshold: float = 0.1,
+) -> torch.Tensor:
+    """Penalize feet that stay in contact too long while the robot is commanded to move."""
+    contact_sensor = env.scene.sensors[sensor_cfg.name]
+    if contact_sensor.data.current_contact_time is None:
+        return torch.zeros(env.num_envs, device=env.device)
+
+    current_contact = contact_sensor.data.current_contact_time[:, sensor_cfg.body_ids]
+    excess = torch.clamp(current_contact - max_contact_time, min=0.0)
+    penalty = torch.sum(torch.square(excess), dim=1)
+
+    if command_name is not None:
+        moving = torch.norm(env.command_manager.get_command(command_name)[:, :2], dim=1) > command_threshold
+        penalty *= moving
+
+    penalty *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
+    return penalty
+
+
 def flat_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     """Penalize non-flat base orientation using L2 squared kernel.
 
@@ -1204,9 +1229,54 @@ def arm_links_below_floating_ring_clearance_soft_exp(
     return reward * soft_gate * on_floating_ring.float()
 
 
-    """Penalize the linear acceleration of bodies using L2-kernel."""
-    asset: Articulation = env.scene[asset_cfg.name]
-    return torch.sum(torch.norm(asset.data.body_lin_acc_w[:, asset_cfg.body_ids, :], dim=-1), dim=1)
+def arm_links_avoid_floating_ring_contact_soft_exp(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg,
+    threshold: float = 0.5,
+    contact_std: float = 1.0,
+    floating_ring_terrain_type: int = 3,
+    platform_width: float = 2.0,
+    ring_width_range: tuple[float, float] = (0.6, 1.8),
+    difficulty_range: tuple[float, float] = (0.0, 1.0),
+    margin: float = 0.4,
+    gate_std: float = 0.25,
+) -> torch.Tensor:
+    """Reward avoiding arm contact near the floating-ring obstacle."""
+    terrain = env.scene.terrain
+    if not hasattr(terrain, "terrain_types") or not hasattr(terrain, "terrain_levels"):
+        return torch.zeros(env.num_envs, device=env.device)
+
+    contact_sensor: ContactSensor = env.scene.sensors[sensor_cfg.name]
+    net_contact_forces = contact_sensor.data.net_forces_w_history
+    max_contact_forces = torch.max(torch.norm(net_contact_forces[:, :, sensor_cfg.body_ids], dim=-1), dim=1).values
+    contact_count = torch.sum((max_contact_forces > threshold).float(), dim=1)
+    reward = torch.exp(-contact_count / max(contact_std, 1.0e-6))
+
+    terrain_levels = terrain.terrain_levels.float()
+    max_level = max(float(getattr(terrain, "max_terrain_level", 1) - 1), 1.0)
+    lower, upper = difficulty_range
+    difficulty = lower + (upper - lower) * torch.clamp(terrain_levels / max_level, 0.0, 1.0)
+    ring_width = ring_width_range[0] + difficulty * (ring_width_range[1] - ring_width_range[0])
+    inner_half_width = 0.5 * platform_width - margin
+    outer_half_width = 0.5 * platform_width + ring_width + margin
+
+    robot: RigidObject = env.scene["robot"]
+    local_xy = robot.data.root_pos_w[:, :2] - env.scene.env_origins[:, :2]
+    abs_xy = torch.abs(local_xy)
+    max_abs_xy = torch.max(abs_xy[:, 0], abs_xy[:, 1])
+    inside_ring_band = (max_abs_xy >= inner_half_width) & (max_abs_xy <= outer_half_width)
+    distance_to_ring_band = torch.where(
+        max_abs_xy < inner_half_width,
+        inner_half_width - max_abs_xy,
+        torch.clamp(max_abs_xy - outer_half_width, min=0.0),
+    )
+    soft_gate = torch.where(
+        inside_ring_band,
+        torch.ones_like(distance_to_ring_band),
+        torch.exp(-distance_to_ring_band / gate_std),
+    )
+    on_floating_ring = terrain.terrain_types == floating_ring_terrain_type
+    return reward * soft_gate * on_floating_ring.float()
 
 
 """

@@ -24,8 +24,8 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         "rough",
     )
 
-    def __init__(self, cfg, render_mode, **kwargs):
-        super().__init__(cfg=cfg)
+    def __init__(self, cfg, render_mode=None, **kwargs):
+        super().__init__(cfg=cfg, render_mode=render_mode, **kwargs)
         self._sim_step_counter = 0
         self._cts_moe_enabled = hasattr(self.cfg, "multi_task_rewards")
         self._cts_moe_reward_log: dict[str, torch.Tensor] = {}
@@ -357,24 +357,21 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         raise ValueError(f"Unsupported terrain height mode: {mode}")
 
     def _compute_ee_pose_position_metrics(self, ee_term) -> dict[str, torch.Tensor]:
-        """Return EE position errors in both legacy base-frame and current reward frames."""
+        """Return EE position errors in base frame and a compatibility z metric."""
         command = ee_term.command
         body_idx = ee_term.body_idx
         ee_pos_w = self.robot.data.body_pos_w[:, body_idx]
         ee_pos_b = quat_apply_inverse(self.robot.data.root_state_w[:, 3:7], ee_pos_w - self.robot.data.root_pos_w)
 
         base_frame_error = torch.abs(ee_pos_b[:, :3] - command[:, :3])
-        reward_frame_error = base_frame_error.clone()
-        if hasattr(self.scene, "sensors") and "height_scanner" in self.scene.sensors:
-            local_terrain_height_w = self._compute_local_terrain_height_w(mode="mean")
-            ee_height_above_terrain = ee_pos_w[:, 2] - local_terrain_height_w
-            reward_frame_error[:, 2] = torch.abs(ee_height_above_terrain - command[:, 2])
 
         return {
-            "ee_pose/position_error": torch.norm(reward_frame_error, dim=-1),
+            "ee_pose/position_error": torch.norm(base_frame_error, dim=-1),
             "ee_pose/position_error_base_frame": torch.norm(base_frame_error, dim=-1),
             "ee_pose/position_error_xy_b": torch.norm(base_frame_error[:, :2], dim=-1),
-            "ee_pose/position_error_z_terrain": reward_frame_error[:, 2],
+            "ee_pose/position_error_z_b": base_frame_error[:, 2],
+            # Backward-compatible alias for old logs.
+            "ee_pose/position_error_z_terrain": base_frame_error[:, 2],
         }
 
     def _get_per_env_command_metrics(self) -> dict[str, torch.Tensor]:
@@ -416,8 +413,26 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         for task_name, mask in task_masks.items():
             for metric_name, values in per_env_metrics.items():
                 log[f"Metrics/{task_name}/{metric_name}"] = self._masked_mean(values, mask)
+        log.update(self._get_terrain_level_metrics())
 
         self._cts_moe_task_metrics_log = log
+
+    def _get_terrain_level_metrics(self) -> dict[str, torch.Tensor]:
+        """Return per-terrain curriculum level metrics for logging."""
+        terrain = getattr(self.scene, "terrain", None)
+        if terrain is None or not hasattr(terrain, "terrain_levels") or not hasattr(terrain, "terrain_types"):
+            return {}
+
+        terrain_levels = terrain.terrain_levels.float()
+        terrain_types = terrain.terrain_types.long()
+        terrain_names = self._context_task_names()
+
+        log: dict[str, torch.Tensor] = {}
+        log["Curriculum/terrain_level/mean"] = terrain_levels.mean()
+        for terrain_type, terrain_name in enumerate(terrain_names):
+            mask = terrain_types == terrain_type
+            log[f"Curriculum/terrain_level/{terrain_name}"] = self._masked_mean(terrain_levels, mask)
+        return log
 
     def _log_reward_terms(
         self,
@@ -485,7 +500,9 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             and terrain_cfg.num_cols == len(terrain_cfg.sub_terrains)
         ):
             return terrain.terrain_types
-        return self.task_id
+        if hasattr(self, "task_id"):
+            return self.task_id
+        return torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
 
     def _context_task_names(self) -> tuple[str, ...]:
         terrain = getattr(self.scene, "terrain", None)

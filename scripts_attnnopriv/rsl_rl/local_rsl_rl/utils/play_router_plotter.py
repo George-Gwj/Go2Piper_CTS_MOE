@@ -38,9 +38,12 @@ class PlayRouterWeightLogger:
         routing_mode: str = "soft",
         inference_mode: str = "teacher",
         max_points: int = 2000,
+        trajectory_env_index: int | None = None,
     ):
         if sample_interval < 1:
             raise ValueError("sample_interval must be >= 1")
+        if trajectory_env_index is not None and trajectory_env_index < 0:
+            raise ValueError("trajectory_env_index must be >= 0")
 
         self.task_names = list(task_names)
         self.expert_names = list(expert_names)
@@ -50,11 +53,17 @@ class PlayRouterWeightLogger:
         self.routing_mode = routing_mode
         self.inference_mode = inference_mode
         self.max_points = max_points
+        self.trajectory_env_index = trajectory_env_index
 
         self._steps: dict[str, list[int]] = {task_name: [] for task_name in self.task_names}
         self._weights: dict[str, dict[str, list[float]]] = {
             task_name: {expert_name: [] for expert_name in self.expert_names}
             for task_name in self.task_names
+        }
+        self._trajectory_steps: list[int] = []
+        self._trajectory_task_ids: list[int] = []
+        self._trajectory_weights: dict[str, list[float]] = {
+            expert_name: [] for expert_name in self.expert_names
         }
 
         self._plt = None
@@ -78,7 +87,7 @@ class PlayRouterWeightLogger:
                 line, = axis.plot([], [], linewidth=1.8, label=expert_name)
                 self._lines[task_name][expert_name] = line
             axis.set_title(task_name)
-            axis.set_ylim(0.0, 1.0)
+            axis.set_ylim(-1.0, 1.0)
             axis.set_xlim(0.0, 10.0)
             axis.grid(True, alpha=0.3)
             axis.legend(loc="best", fontsize=8)
@@ -101,6 +110,8 @@ class PlayRouterWeightLogger:
         if step % self.sample_interval != 0:
             return
 
+        self._record_trajectory(step, router_weights, task_ids)
+
         router_entries = OnPolicyRunner.aggregate_router_weights_by_task(
             router_weights,
             task_ids,
@@ -121,6 +132,32 @@ class PlayRouterWeightLogger:
 
         if updated and self.live_plot:
             self.refresh_live_plot()
+
+    def _record_trajectory(
+        self,
+        step: int,
+        router_weights: torch.Tensor,
+        task_ids: torch.Tensor,
+    ) -> None:
+        if self.trajectory_env_index is None:
+            return
+        if self.trajectory_env_index >= router_weights.shape[0]:
+            return
+
+        env_idx = self.trajectory_env_index
+        self._trajectory_steps.append(step)
+        self._trajectory_task_ids.append(int(task_ids.long().view(-1)[env_idx].item()))
+        env_weights = router_weights[env_idx].detach().float().cpu()
+        for expert_idx, expert_name in enumerate(self.expert_names):
+            self._trajectory_weights[expert_name].append(float(env_weights[expert_idx].item()))
+
+        overflow = len(self._trajectory_steps) - self.max_points
+        if overflow <= 0:
+            return
+        self._trajectory_steps = self._trajectory_steps[overflow:]
+        self._trajectory_task_ids = self._trajectory_task_ids[overflow:]
+        for expert_name in self.expert_names:
+            self._trajectory_weights[expert_name] = self._trajectory_weights[expert_name][overflow:]
 
     def _trim_history(self, task_name: str) -> None:
         overflow = len(self._steps[task_name]) - self.max_points
@@ -146,7 +183,7 @@ class PlayRouterWeightLogger:
                 line.set_data(steps, self._weights[task_name][expert_name])
             axis.relim()
             axis.autoscale_view(scalex=True, scaley=False)
-            axis.set_ylim(0.0, 1.0)
+            axis.set_ylim(-1.0, 1.0)
 
         if max_step > 0:
             for axis in self._axes.values():
@@ -157,7 +194,7 @@ class PlayRouterWeightLogger:
         self._plt.pause(0.001)
 
     def has_data(self) -> bool:
-        return any(len(steps) > 0 for steps in self._steps.values())
+        return bool(self._trajectory_steps) or any(len(steps) > 0 for steps in self._steps.values())
 
     def close(self) -> None:
         if self._fig is not None and self._plt is not None:
@@ -176,7 +213,9 @@ class PlayRouterWeightLogger:
         saved_paths: list[Path] = []
 
         saved_paths.extend(self._save_csv(routing_mode, inference_mode))
+        saved_paths.extend(self._save_trajectory_csv(routing_mode, inference_mode))
         saved_paths.extend(self._save_task_plots(routing_mode, inference_mode, plt))
+        saved_paths.extend(self._save_trajectory_plot(routing_mode, inference_mode, plt))
         saved_paths.append(self._save_overview_plot(routing_mode, inference_mode, plt))
         return saved_paths
 
@@ -193,6 +232,23 @@ class PlayRouterWeightLogger:
                     row = [task_name, step]
                     row.extend(self._weights[task_name][expert_name][idx] for expert_name in self.expert_names)
                     writer.writerow(row)
+        return [csv_path]
+
+    def _save_trajectory_csv(self, routing_mode: str, inference_mode: str) -> list[Path]:
+        if not self._trajectory_steps:
+            return []
+
+        env_idx = self.trajectory_env_index if self.trajectory_env_index is not None else 0
+        csv_path = self.output_dir / f"router_weights_robot{env_idx}_{routing_mode}_{inference_mode}.csv"
+        with csv_path.open("w", newline="", encoding="utf-8") as csv_file:
+            writer = csv.writer(csv_file)
+            writer.writerow(["step", "task_id", "task", *self.expert_names])
+            for idx, step in enumerate(self._trajectory_steps):
+                task_id = self._trajectory_task_ids[idx]
+                task_name = self.task_names[task_id] if 0 <= task_id < len(self.task_names) else f"task_{task_id}"
+                row = [step, task_id, task_name]
+                row.extend(self._trajectory_weights[expert_name][idx] for expert_name in self.expert_names)
+                writer.writerow(row)
         return [csv_path]
 
     def _save_task_plots(self, routing_mode: str, inference_mode: str, plt) -> list[Path]:
@@ -214,7 +270,7 @@ class PlayRouterWeightLogger:
             axis.set_title(f"MoE Router Weights - {task_name}")
             axis.set_xlabel("Play step")
             axis.set_ylabel("Router weight")
-            axis.set_ylim(0.0, 1.0)
+            axis.set_ylim(-1.0, 1.0)
             axis.grid(True, alpha=0.3)
             axis.legend(loc="best")
 
@@ -224,6 +280,68 @@ class PlayRouterWeightLogger:
             plt.close(fig)
             saved_paths.append(plot_path)
         return saved_paths
+
+    def _save_trajectory_plot(self, routing_mode: str, inference_mode: str, plt) -> list[Path]:
+        if not self._trajectory_steps:
+            return []
+
+        env_idx = self.trajectory_env_index if self.trajectory_env_index is not None else 0
+        fig, axis = plt.subplots(figsize=(12, 5.5))
+        for expert_name in self.expert_names:
+            axis.plot(
+                self._trajectory_steps,
+                self._trajectory_weights[expert_name],
+                linewidth=2.0,
+                label=expert_name,
+            )
+
+        self._shade_task_segments(axis)
+        axis.set_title(f"MoE Router Weights - robot {env_idx} all-terrain trajectory")
+        axis.set_xlabel("Play step")
+        axis.set_ylabel("Router weight")
+        axis.set_ylim(-1.0, 1.0)
+        axis.grid(True, alpha=0.3)
+        axis.legend(loc="best")
+
+        fig.tight_layout()
+        plot_path = self.output_dir / f"router_weights_robot{env_idx}_{routing_mode}_{inference_mode}.png"
+        fig.savefig(plot_path, dpi=160)
+        plt.close(fig)
+        return [plot_path]
+
+    def _shade_task_segments(self, axis) -> None:
+        if not self._trajectory_steps:
+            return
+
+        segment_start_idx = 0
+        current_task_id = self._trajectory_task_ids[0]
+        for idx, task_id in enumerate(self._trajectory_task_ids[1:], start=1):
+            if task_id == current_task_id:
+                continue
+            self._shade_one_segment(axis, segment_start_idx, idx - 1, current_task_id)
+            segment_start_idx = idx
+            current_task_id = task_id
+        self._shade_one_segment(
+            axis,
+            segment_start_idx,
+            len(self._trajectory_steps) - 1,
+            current_task_id,
+        )
+
+    def _shade_one_segment(self, axis, start_idx: int, end_idx: int, task_id: int) -> None:
+        start_step = self._trajectory_steps[start_idx]
+        end_step = self._trajectory_steps[end_idx]
+        task_name = self.task_names[task_id] if 0 <= task_id < len(self.task_names) else f"task_{task_id}"
+        axis.axvspan(start_step, end_step, color=f"C{task_id % 10}", alpha=0.08)
+        axis.text(
+            (start_step + end_step) * 0.5,
+            0.98,
+            task_name,
+            ha="center",
+            va="top",
+            fontsize=8,
+            alpha=0.7,
+        )
 
     def _save_overview_plot(self, routing_mode: str, inference_mode: str, plt) -> Path:
         active_tasks = [task_name for task_name in self.task_names if self._steps[task_name]]
@@ -241,7 +359,7 @@ class PlayRouterWeightLogger:
                     label=expert_name,
                 )
             axis.set_title(task_name)
-            axis.set_ylim(0.0, 1.0)
+            axis.set_ylim(-1.0, 1.0)
             axis.grid(True, alpha=0.3)
             axis.legend(loc="best", fontsize=8)
 

@@ -152,6 +152,7 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
         # make a smaller scene for play
         self.scene.num_envs = 1
         self.scene.env_spacing = 8.0
+        self.episode_length_s = 60.0
         # disable randomization for play
         self.observations.proprio.enable_corruption = False
         self.observations.proprio_history.enable_corruption = False
@@ -172,10 +173,11 @@ class Go2PiperMoEEnvCfg_PLAY(Go2PiperMoEEnvCfg):
 
         self.commands.base_velocity.is_Go2ARM = False
         
-        self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
+        self.commands.base_velocity.resampling_time_range = (1e6, 1e6)
         self.commands.base_velocity.rel_standing_envs = 0.1
         
         # final
-        self.commands.base_velocity.ranges.lin_vel_x = (0.3, 0.8)
-        self.commands.base_velocity.ranges.lin_vel_y = (-0.5, 0.5)
-        self.commands.base_velocity.ranges.ang_vel_z = (-0.5, 0.5)
+        self.commands.base_velocity.ranges.lin_vel_x = (0.5, 0.5)
+        self.commands.base_velocity.ranges.lin_vel_y = (0.0, 0.0)
+        self.commands.base_velocity.ranges.ang_vel_z = (0.0, 0.0)
+

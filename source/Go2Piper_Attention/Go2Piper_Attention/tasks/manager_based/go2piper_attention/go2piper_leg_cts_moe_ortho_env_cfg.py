@@ -101,7 +101,7 @@ CTS_MOE_PLAY_LONG_TERRAINS_CFG = TerrainGeneratorCfg(
     curriculum=True,
     size=(8.0, 8.0),
     num_rows=1,
-    num_cols=5,
+    num_cols=4,
     horizontal_scale=0.05,
     vertical_scale=0.005,
     slope_threshold=0.75,
@@ -111,12 +111,6 @@ CTS_MOE_PLAY_LONG_TERRAINS_CFG = TerrainGeneratorCfg(
             proportion=1.0,
         ),
         "ascend": terrain_gen.HfPyramidStairsTerrainCfg(
-            proportion=1.0,
-            step_height_range=(0.12, 0.12),
-            step_width=0.31,
-            platform_width=2.0,
-        ),
-        "descend": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
             proportion=1.0,
             step_height_range=(0.12, 0.12),
             step_width=0.31,
@@ -138,6 +132,47 @@ CTS_MOE_PLAY_LONG_TERRAINS_CFG = TerrainGeneratorCfg(
     },
 )
 
+CTS_MOE_PLAY_LONG_TERRAINS_2_CFG = TerrainGeneratorCfg(
+    seed=42,
+    curriculum=True,
+    size=(8.0, 8.0),
+    num_rows=1,
+    num_cols=5,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=False,
+    sub_terrains={
+        "flat": terrain_gen.MeshPlaneTerrainCfg(
+            proportion=1.0,
+        ),
+        "ascend": terrain_gen.HfPyramidStairsTerrainCfg(
+            proportion=1.0,
+            step_height_range=(0.12, 0.12),
+            step_width=0.31,
+            platform_width=2.0,
+        ),
+        "descend": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
+            proportion=1.0,
+            step_height_range=(0.02, 0.22),
+            step_width=0.31,
+            platform_width=2.0,
+        ),
+        "floating_ring": terrain_gen.MeshFloatingRingTerrainCfg(
+            proportion=1.0,
+            platform_width=2.0,
+            ring_width_range=(1.2, 1.2),
+            ring_height_range=(0.55, 0.55),
+            ring_thickness=0.15,
+        ),
+        "rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=1.0,
+            noise_range=(0.08, 0.08),
+            noise_step=0.005,
+            downsampled_scale=0.20,
+        ),
+    },
+)
 
 @configclass
 class MySceneCfg(InteractiveSceneCfg):
@@ -193,7 +228,7 @@ class MySceneCfg(InteractiveSceneCfg):
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[1.6, 1.0]),
         # debug_vis=True,
-        debug_vis=True,
+        debug_vis=False,
     )
 
     H_lateral_scan = MultiMeshRayCasterCfg(
@@ -662,12 +697,10 @@ class RewardsCfg:
     action_rate_l2_common = RewTerm(func=mdp.action_rate_l2_Go2, weight=-0.01)
 
     feet_air_time_common = RewTerm(
-        func=mdp.feet_air_time,
+        func=mdp.feet_air_time_variance_penalty,
         weight= 0.5,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "command_name": "base_velocity",
-            "threshold": 0.5,
         },
     )
     feet_slide_common = RewTerm(
@@ -678,24 +711,24 @@ class RewardsCfg:
         },
     )
 
-    F_feet_air_time_common = RewTerm(
-        func=mdp.feet_air_time,
-        weight= 0.5,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="F.*_foot"),
-            "command_name": "base_velocity",
-            "threshold": 0.5,
-        },
-    )
-    R_feet_air_time_common = RewTerm(
-        func=mdp.feet_air_time,
-        weight= 2.0,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="R.*_foot"),
-            "command_name": "base_velocity",
-            "threshold": 0.5,
-        },
-    )
+    # F_feet_air_time_common = RewTerm(
+    #     func=mdp.feet_air_time,
+    #     weight= 0.5,
+    #     params={
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names="F.*_foot"),
+    #         "command_name": "base_velocity",
+    #         "threshold": 0.5,
+    #     },
+    # )
+    # R_feet_air_time_common = RewTerm(
+    #     func=mdp.feet_air_time,
+    #     weight= 2.0,
+    #     params={
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names="R.*_foot"),
+    #         "command_name": "base_velocity",
+    #         "threshold": 0.5,
+    #     },
+    # )
 
     feet_height_flat = RewTerm(
         func=mdp.feet_height,
@@ -734,6 +767,16 @@ class RewardsCfg:
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
             "max_air_time": 0.5,
+        },
+    )
+    feet_long_contact_common = RewTerm(
+        func=mdp.feet_long_contact_penalty,
+        weight=-0.1,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "max_contact_time": 0.5,
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
         },
     )
     

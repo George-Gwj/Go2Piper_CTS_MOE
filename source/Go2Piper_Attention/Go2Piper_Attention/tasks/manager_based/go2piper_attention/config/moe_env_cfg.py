@@ -31,62 +31,77 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.commands.base_velocity.curriculum_coeff = 4000
         # init
         self.commands.base_velocity.rel_standing_envs = 0.05
-        self.commands.base_velocity.resampling_time_range = (4.0, 6.0)
-        self.commands.base_velocity.ranges_init.lin_vel_x = (0.0, 0.3)
-        self.commands.base_velocity.ranges_init.lin_vel_y = (-0.1, 0.1)
-        self.commands.base_velocity.ranges_init.ang_vel_z = (-0.1, 0.1)
+        self.commands.base_velocity.resampling_time_range = (10.0, 10.0)
+        self.commands.base_velocity.ranges_init.lin_vel_x  = (0.0, 0.3)
+        self.commands.base_velocity.ranges_init.lin_vel_y  = (-0.1, 0.1)
+        self.commands.base_velocity.ranges_init.ang_vel_z  = (-0.1, 0.1)
         # final
         self.commands.base_velocity.ranges_final.lin_vel_x = (0.3, 0.8)
         self.commands.base_velocity.ranges_final.lin_vel_y = (-0.5, 0.5)
         self.commands.base_velocity.ranges_final.ang_vel_z = (-0.5, 0.5)
 
-        ## position command
+  
+        ## position command 
         self.commands.ee_pose.curriculum_coeff = 4000
-        self.commands.ee_pose.resampling_time_range = (4.0, 6.0)
+        self.commands.ee_pose.zero_roll_yaw_command = True
+        self.commands.ee_pose.resampling_time_range = (10.0, 10.0)
         # init
         self.commands.ee_pose.ranges_init.pos_x = (0.33, 0.38)
         self.commands.ee_pose.ranges_init.pos_y = (-0.05, 0.05)
         self.commands.ee_pose.ranges_init.pos_z = (0.1, 0.2)
-        self.commands.ee_pose.ranges_init.pitch = (0.0, 3.14 / 4)
+        self.commands.ee_pose.ranges_init.roll = (0.0, 0.0)
+        self.commands.ee_pose.ranges_init.pitch = (0.0, 0.0)
+        self.commands.ee_pose.ranges_init.yaw = (0.0, 0.0)
+        # self.commands.ee_pose.ranges_init.pos_x = (-0.6, 0.6)
+        # self.commands.ee_pose.ranges_init.pos_y = (-0.5, 0.5)
+        # self.commands.ee_pose.ranges_init.pos_z = (0.55, 0.55)
+
         # final
-        self.commands.ee_pose.ranges_final.pos_x = (0.3, 0.6)
-        self.commands.ee_pose.ranges_final.pos_y = (-0.15, 0.15)
-        self.commands.ee_pose.ranges_final.pos_z = (0.08, 0.25)
-        self.commands.ee_pose.ranges_final.pitch = (0.0, 3.14 / 4)
-        self.commands.ee_pose.ranges.pitch = (3.14 / 4, 3.14 / 4)
+        self.commands.ee_pose.ranges_final.pos_x = (0.45, 0.65)
+        self.commands.ee_pose.ranges_final.pos_y = (-0.2, 0.2)
+        self.commands.ee_pose.ranges_final.pos_z = (0.0, 0.2)
+        
+        self.commands.ee_pose.ranges_final.roll = (0.0, 0.0)
+        self.commands.ee_pose.ranges_final.pitch = (0.0, 0.0)
+        self.commands.ee_pose.ranges_final.yaw = (0.0, 0.0)
+        self.commands.ee_pose.ranges.roll = (0.0, 0.0)
+        self.commands.ee_pose.ranges.pitch = (0.0, 0.0)
+        self.commands.ee_pose.ranges.yaw = (0.0, 0.0)
 
         # Common reward weights. Reward terms ending with "_common" are used by all tasks.
         self.rewards.end_effector_position_tracking_exp_common.weight = 1.0
         self.rewards.end_effector_position_tracking_fine_grained_common.weight = 1.0
+        self.rewards.end_effector_orientation_tracking_common.weight = -1.5
         self.rewards.end_effector_action_rate_common.weight = -0.005
         self.rewards.end_effector_action_smoothness_common.weight = -0.02
         self.rewards.end_effector_joint_vel_common.weight = -0.001
         self.rewards.end_effector_lin_vel_z_l2_common.weight = -0.0
         self.rewards.end_effector_ang_vel_xy_l2_common.weight = -0.0
         self.rewards.end_effector_flat_orientation_l2_common.weight = -0.0
-        self.rewards.track_ang_vel_z_exp_common.weight = 2.0
+        self.rewards.end_effector_probe_clearance_common.weight = 1.0
+        self.rewards.track_ang_vel_z_exp_common.weight = 1.0
         self.rewards.track_ori_exp_common.weight = 0.0
         self.rewards.ang_vel_xy_l2_common.weight = -0.1
         self.rewards.dof_torques_l2_common.weight = -1.0e-5
         self.rewards.dof_acc_l2_common.weight = -2.5e-7
         self.rewards.action_rate_l2_common.weight = -0.01
-        self.rewards.feet_air_time_common.weight = 0.4
-        self.rewards.feet_slide_common.weight = -0.05
-        self.rewards.F_feet_air_time_common.weight = 0.0
-        self.rewards.R_feet_air_time_common.weight = 0.0
-        self.rewards.foot_contact_common.weight = 0.005
-        self.rewards.joint_mirror_common.weight = -0.05
+        self.rewards.feet_air_time_common.weight = 0.2
+        self.rewards.feet_slide_common.weight = -0.08
+        # self.rewards.F_feet_air_time_common.weight = 0.0
+        # self.rewards.R_feet_air_time_common.weight = 0.0
+        self.rewards.foot_contact_common.weight = 0.02
+        self.rewards.joint_mirror_common.weight = -0.10
         self.rewards.gait_reward_common.weight = 1.0
         self.rewards.feet_long_air_common.weight = -0.1
         self.rewards.hip_deviation_common.weight = -0.2
-        self.rewards.joint_deviation_common.weight = -0.00
-        self.rewards.F_joint_deviation_common.weight = -0.06
-        self.rewards.R_joint_deviation_common.weight = -0.1
+        self.rewards.joint_deviation_common.weight = -0.02
+        self.rewards.F_joint_deviation_common.weight = -0.05
+        self.rewards.R_joint_deviation_common.weight = -0.05
         self.rewards.action_smoothness_common.weight = -0.02
 
         # Rough reward weights:
-        self.rewards.track_lin_vel_x_exp_rough.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_rough.weight = 4.0
+        self.rewards.track_lin_vel_x_exp_rough.weight = 2.5
+        self.rewards.track_lin_vel_y_exp_rough.weight = 1.0
         self.rewards.track_base_height_exp_rough.weight = 1.0
         self.rewards.lin_vel_z_l2_rough.weight = -2.5
         self.rewards.thigh_contact_rough.weight = -1.0
@@ -97,21 +112,21 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.feet_height_rough.weight = -0.2
 
         # Floating-ring reward weights:
-        self.rewards.track_lin_vel_x_exp_floating_ring.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_floating_ring.weight = 4.0
-        self.rewards.track_base_height_exp_floating_ring.weight = 2.0
+        self.rewards.track_lin_vel_x_exp_floating_ring.weight = 1.5
+        self.rewards.track_lin_vel_y_exp_floating_ring.weight = 0.5
+        self.rewards.track_base_height_exp_floating_ring.weight = 4.0
         self.rewards.lin_vel_z_l2_floating_ring.weight = -1.0
-        self.rewards.thigh_contact_floating_ring.weight = -1.0
-        self.rewards.calf_contact_floating_ring.weight = -1.0
+        self.rewards.thigh_contact_floating_ring.weight = -0.5
+        self.rewards.calf_contact_floating_ring.weight = -0.5
         self.rewards.base_contact_floating_ring.weight = -1.0
         self.rewards.arm_contact_floating_ring.weight = -1.0
-        self.rewards.flat_orientation_l2_floating_ring.weight = -1.5
+        self.rewards.flat_orientation_l2_floating_ring.weight = -0.5
         self.rewards.feet_height_floating_ring.weight = -0.2
-        self.rewards.probe_clearance_floating_ring.weight = 1.0
+        self.rewards.probe_clearance_floating_ring.weight = 0.0
 
         # Ascend reward weights:
-        self.rewards.track_lin_vel_x_exp_ascend.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_ascend.weight = 4.0
+        self.rewards.track_lin_vel_x_exp_ascend.weight = 2.5
+        self.rewards.track_lin_vel_y_exp_ascend.weight = 1.0
         self.rewards.track_base_height_exp_ascend.weight = 1.0
         self.rewards.lin_vel_z_l2_ascend.weight = -0.25
         self.rewards.thigh_contact_ascend.weight = -0.5
@@ -122,8 +137,8 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.feet_height_body_ascend.weight = -5.0
 
         # Descend reward weights:
-        self.rewards.track_lin_vel_x_exp_descend.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_descend.weight = 4.0
+        self.rewards.track_lin_vel_x_exp_descend.weight = 2.5
+        self.rewards.track_lin_vel_y_exp_descend.weight = 1.0
         self.rewards.track_base_height_exp_descend.weight = 1.0
         self.rewards.lin_vel_z_l2_descend.weight = -0.25
         self.rewards.thigh_contact_descend.weight = -0.5
@@ -134,10 +149,10 @@ class Go2PiperMoEEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.feet_height_body_descend.weight = -5.0
 
         # Flat reward weights:
-        self.rewards.track_lin_vel_x_exp_flat.weight = 4.0
-        self.rewards.track_lin_vel_y_exp_flat.weight = 4.0
+        self.rewards.track_lin_vel_x_exp_flat.weight = 2.5
+        self.rewards.track_lin_vel_y_exp_flat.weight = 1.0
         self.rewards.track_base_height_exp_flat.weight = 1.0
-        self.rewards.end_effector_orientation_tracking_flat.weight = -0.5
+        self.rewards.end_effector_orientation_tracking_flat.weight = 0.0
         self.rewards.lin_vel_z_l2_flat.weight = -2.5
         self.rewards.thigh_contact_flat.weight = -0.5
         self.rewards.calf_contact_flat.weight = -0.5

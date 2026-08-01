@@ -318,3 +318,145 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
         popart_huber_delta=1.0,
         value_loss_per_task_average=True,
     )
+
+
+@configclass
+class Go2PiperCTSMoETeacher2ExpertsRunnerCfg(RslRlOnPolicyRunnerCfg):
+    """Runner config for teacher-only Orthogonal CTS-MoE training with two experts."""
+
+    num_steps_per_env = 24
+    max_iterations = 30000
+    save_interval = 500
+    experiment_name = "go2piper_cts_moe_ortho_teacher_2experts"
+    empirical_normalization = False
+    load_checkpoint: str = "CTSMoE_.*.pt"
+
+    policy = Go2PiperCTSMoETeacherPolicyCfg(
+        proprio_dim=71,
+        privileged_dim=103,
+        action_dim=18,
+        latent_dim=32,
+        num_tasks=5,
+        height_channels=1,
+        teacher_privileged_hidden_dims=[512, 256],
+        teacher_privileged_feature_dim=32,
+        teacher_height_hidden_dims=[512, 256],
+        teacher_height_feature_dim=128,
+        student_perception_type="depth",
+        student_perception_channels=1,
+        student_proprio_hidden_dims=[512, 256],
+        student_proprio_feature_dim=32,
+        student_depth_filters=[16, 32, 64],
+        student_depth_feature_dim=128,
+        student_gru_hidden_dim=256,
+        student_gru_num_layers=1,
+        actor_type="orthogonal_cts_moe",
+        orthogonal_mode="gram_schmidt",
+        gate_activation="tanh",
+        num_experts=2,
+        expert_feature_dim=128,
+        expert_names=[
+            "expert_0",
+            "expert_1",
+        ],
+        expert_hidden_dims=[256, 128],
+        router_hidden_dims=[128, 64],
+        action_head_hidden_dims=[256, 128],
+        use_expert_layernorm=True,
+        use_moe_output_layernorm=True,
+        gram_schmidt_eps=1e-6,
+        log_expert_metrics=True,
+        critic_hidden_dims=[256, 128],
+        critic_shared_trunk=False,
+        critic_head_hidden_dims=[64],
+        init_log_std=0.0,
+        learnable_log_std=True,
+        activation="elu",
+    )
+
+
+    algorithm = Go2PiperCTSMoETeacherAlgorithmCfg(
+        training_mode="teacher",
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.005,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=3e-4,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+        eps=1e-5,
+        student_learning_rate=1e-4,
+        distillation_loss_coef=0.0,
+        student_rollout_ratio=0.0,
+        router_entropy_coef=0.0, # TODO 5e-4
+        router_balance_coef=0.0, # TODO 2e-3
+        router_logit_l2_coef=0.0,
+        lambda_orth=1e-3,
+        orth_loss_on="raw",
+        per_task_advantage_normalization=True,
+        use_popart=True,
+        popart_beta=0.99,
+        popart_eps=1e-5,
+        popart_min_std=1e-2,
+        popart_use_output_rescale=True,
+        popart_value_loss="huber",
+        popart_huber_delta=1.0,
+        value_loss_per_task_average=True,
+    )
+
+
+@configclass
+class Go2PiperCTSMoETeacher3ExpertsRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
+    """Runner config for teacher-only Orthogonal CTS-MoE training with three experts."""
+
+    experiment_name = "go2piper_cts_moe_ortho_teacher_3experts"
+    load_checkpoint: str = "CTSMoE_.*.pt"
+
+    policy = Go2PiperCTSMoETeacherPolicyCfg(
+        proprio_dim=71,
+        privileged_dim=103,
+        action_dim=18,
+        latent_dim=32,
+        num_tasks=5,
+        height_channels=1,
+        teacher_privileged_hidden_dims=[512, 256],
+        teacher_privileged_feature_dim=32,
+        teacher_height_hidden_dims=[512, 256],
+        teacher_height_feature_dim=128,
+        student_perception_type="depth",
+        student_perception_channels=1,
+        student_proprio_hidden_dims=[512, 256],
+        student_proprio_feature_dim=32,
+        student_depth_filters=[16, 32, 64],
+        student_depth_feature_dim=128,
+        student_gru_hidden_dim=256,
+        student_gru_num_layers=1,
+        actor_type="orthogonal_cts_moe",
+        orthogonal_mode="gram_schmidt",
+        gate_activation="tanh",
+        num_experts=3,
+        expert_feature_dim=128,
+        expert_names=[
+            "expert_0",
+            "expert_1",
+            "expert_2",
+        ],
+        expert_hidden_dims=[256, 128],
+        router_hidden_dims=[128, 64],
+        action_head_hidden_dims=[256, 128],
+        use_expert_layernorm=True,
+        use_moe_output_layernorm=True,
+        gram_schmidt_eps=1e-6,
+        log_expert_metrics=True,
+        critic_hidden_dims=[256, 128],
+        critic_shared_trunk=False,
+        critic_head_hidden_dims=[64],
+        init_log_std=0.0,
+        learnable_log_std=True,
+        activation="elu",
+    )

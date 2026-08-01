@@ -132,3 +132,11 @@ class Go2PiperLegCTSMoETeacherRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
     )
 
     algorithm = Go2PiperCTSMoETeacherAlgorithmCfg()
+
+
+@configclass
+class Go2PiperLegCTSMoETeacher3ExpertsRunnerCfg(Go2PiperLegCTSMoETeacherRunnerCfg):
+    """Named runner config for teacher-only leg-only Orthogonal CTS-MoE training with three experts."""
+
+    experiment_name = "go2piper_leg_cts_moe_ortho_teacher_3experts"
+    load_checkpoint: str = "LegCTSMoEOrthoTeacher_.*.pt"

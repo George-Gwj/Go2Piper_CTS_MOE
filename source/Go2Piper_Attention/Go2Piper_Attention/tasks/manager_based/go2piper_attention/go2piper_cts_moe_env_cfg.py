@@ -609,7 +609,7 @@ class RewardsCfg:
         weight=2.5,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
                 "command_name": "ee_pose",
-                "std": 0.1},
+                "std": 0.4},
     )
 
     end_effector_position_tracking_fine_grained_common = RewTerm(
@@ -617,9 +617,16 @@ class RewardsCfg:
         weight=2.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
-            "std": 0.1,  
+            "std": 0.4,  
             "command_name": "ee_pose",
         },
+    )
+
+    end_effector_orientation_tracking_common = RewTerm(
+        func=mdp.orientation_command_error,
+        weight=0.0,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose"},
     )
 
     end_effector_orientation_tracking_flat = RewTerm(
@@ -642,6 +649,21 @@ class RewardsCfg:
     end_effector_lin_vel_z_l2_common = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.5)
     end_effector_ang_vel_xy_l2_common = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.02) # -0.05
     end_effector_flat_orientation_l2_common = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+
+    end_effector_probe_clearance_common = RewTerm(
+        func=mdp.arm_links_avoid_floating_ring_contact_soft_exp,
+        weight=0.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["link[2-6]", "end_effector"]),
+            "threshold": 0.5,
+            "contact_std": 1.0,
+            "floating_ring_terrain_type": 3,
+            "platform_width": 2.0,
+            "ring_width_range": (0.6, 1.8),
+            "margin": 0.4,
+            "gate_std": 0.25,
+        },
+    )
 
     # arm_contact = RewTerm(
     #     func=mdp.undesired_contacts,

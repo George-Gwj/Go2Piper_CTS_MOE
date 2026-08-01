@@ -96,8 +96,8 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.action_rate_l2_common.weight = -0.01
         self.rewards.feet_air_time_common.weight = 0.4
         self.rewards.feet_slide_common.weight = -0.05
-        self.rewards.F_feet_air_time_common.weight = 0.0 #0.5
-        self.rewards.R_feet_air_time_common.weight = 0.0 #0.5
+        # self.rewards.F_feet_air_time_common.weight = 0.0 #0.5
+        # self.rewards.R_feet_air_time_common.weight = 0.0 #0.5
         # self.rewards.feet_height_common.weight = -0.2 #TODO # -0.2
         # self.rewards.feet_height_body_common.weight = -0.0 # 0.5 #TODO 
         self.rewards.foot_contact_common.weight = 0.005

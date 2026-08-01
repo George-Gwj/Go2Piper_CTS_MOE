@@ -42,6 +42,26 @@ gym.register(
 )
 
 gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Teacher-2Experts",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_env_cfg:Go2PiperMoEEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe:Go2PiperCTSMoETeacher2ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Teacher-3Experts",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_env_cfg:Go2PiperMoEEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe:Go2PiperCTSMoETeacher3ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
     id="Go2Piper-Attention-CTS-MoE-Play",
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
     disable_env_checker=True,
@@ -58,6 +78,26 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": f"{__name__}.moe_env_cfg:Go2PiperMoEEnvCfg_PLAY",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe:Go2PiperCTSMoETeacherRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Teacher-2Experts-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_env_cfg:Go2PiperMoEEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe:Go2PiperCTSMoETeacher2ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Teacher-3Experts-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_env_cfg:Go2PiperMoEEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe:Go2PiperCTSMoETeacher3ExpertsRunnerCfg",
     },
 )
 
@@ -93,6 +133,26 @@ gym.register(
 )
 
 gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-Teacher-2Experts",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho:Go2PiperCTSMoETeacher2ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-Teacher-3Experts",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho:Go2PiperCTSMoETeacher3ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
     id="Go2Piper-Attention-CTS-MoE-Ortho-Play",
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
     disable_env_checker=True,
@@ -109,6 +169,26 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho:Go2PiperCTSMoETeacherRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-Teacher-2Experts-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho:Go2PiperCTSMoETeacher2ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-Teacher-3Experts-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho:Go2PiperCTSMoETeacher3ExpertsRunnerCfg",
     },
 )
 
@@ -143,6 +223,26 @@ gym.register(
 )
 
 gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-Separate-Teacher-3Experts",
+    entry_point="Go2Piper_Attention.env.manager_env_separate:ManagerRLEnvSeparate",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg_separate:Go2PiperMoEOrthoEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho_separate:Go2PiperCTSMoETeacher3ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-Separate-Teacher-2Experts",
+    entry_point="Go2Piper_Attention.env.manager_env_separate:ManagerRLEnvSeparate",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg_separate:Go2PiperMoEOrthoEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho_separate:Go2PiperCTSMoETeacher2ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
     id="Go2Piper-Attention-CTS-MoE-Ortho-Separate-Play",
     entry_point="Go2Piper_Attention.env.manager_env_separate:ManagerRLEnvSeparate",
     disable_env_checker=True,
@@ -159,6 +259,26 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg_separate:Go2PiperMoEOrthoEnvCfg_PLAY",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho_separate:Go2PiperCTSMoETeacherRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-Separate-Teacher-3Experts-Play",
+    entry_point="Go2Piper_Attention.env.manager_env_separate:ManagerRLEnvSeparate",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg_separate:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho_separate:Go2PiperCTSMoETeacher3ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-Separate-Teacher-2Experts-Play",
+    entry_point="Go2Piper_Attention.env.manager_env_separate:ManagerRLEnvSeparate",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg_separate:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho_separate:Go2PiperCTSMoETeacher2ExpertsRunnerCfg",
     },
 )
 
@@ -327,6 +447,16 @@ gym.register(
 )
 
 gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Leg-Teacher-3Experts",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_leg_env_cfg:Go2PiperMoEEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_leg:Go2PiperLegCTSMoETeacher3ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
     id="Go2Piper-Attention-CTS-MoE-Leg-Play",
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
     disable_env_checker=True,
@@ -343,6 +473,16 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": f"{__name__}.moe_leg_env_cfg:Go2PiperMoEEnvCfg_PLAY",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_leg:Go2PiperCTSMoETeacherRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Leg-Teacher-3Experts-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_leg_env_cfg:Go2PiperMoEEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_leg:Go2PiperLegCTSMoETeacher3ExpertsRunnerCfg",
     },
 )
 
@@ -368,6 +508,16 @@ gym.register(
 )
 
 gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Leg-Ortho-Teacher-3Experts",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_leg_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_leg_ortho:Go2PiperLegCTSMoETeacher3ExpertsRunnerCfg",
+    },
+)
+
+gym.register(
     id="Go2Piper-Attention-CTS-MoE-Leg-Ortho-Play",
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
     disable_env_checker=True,
@@ -384,6 +534,16 @@ gym.register(
     kwargs={
         "env_cfg_entry_point": f"{__name__}.moe_leg_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_leg_ortho:Go2PiperLegCTSMoETeacherRunnerCfg",
+    },
+)
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Leg-Ortho-Teacher-3Experts-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_leg_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_leg_ortho:Go2PiperLegCTSMoETeacher3ExpertsRunnerCfg",
     },
 )
 

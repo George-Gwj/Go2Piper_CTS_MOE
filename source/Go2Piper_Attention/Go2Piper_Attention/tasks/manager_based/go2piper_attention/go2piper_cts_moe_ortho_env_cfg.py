@@ -605,28 +605,20 @@ class RewardsCfg:
     # -- ARM 
     # The name must have a prefix of "end_effector_".
     end_effector_position_tracking_exp_common = RewTerm(
-        func=mdp.position_command_error_exp_terrain_z,
+        func=mdp.position_command_error_exp,
         weight=2.5,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
                 "command_name": "ee_pose",
-                "std": 0.1,
-                "sensor_cfg": SceneEntityCfg("height_scanner"),
-                "terrain_height_mode": "mean",
-                "terrain_z_type_ids": (0, 1, 2, 3, 4),
-                "fixed_terrain_height_by_type": {"3": 0.0, "4": 0.0}},
+                "std": 0.4},
     )
 
     end_effector_position_tracking_fine_grained_common = RewTerm(
-        func=mdp.position_command_error_tanh_terrain_z,
+        func=mdp.position_command_error_tanh,
         weight=2.0,
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
-            "std": 0.1,  
+            "std": 0.4,  
             "command_name": "ee_pose",
-            "sensor_cfg": SceneEntityCfg("height_scanner"),
-            "terrain_height_mode": "mean",
-            "terrain_z_type_ids": (0, 1, 2, 3, 4),
-            "fixed_terrain_height_by_type": {"3": 0.0, "4": 0.0},
         },
     )
 
@@ -650,6 +642,21 @@ class RewardsCfg:
     end_effector_lin_vel_z_l2_common = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.5)
     end_effector_ang_vel_xy_l2_common = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.02) # -0.05
     end_effector_flat_orientation_l2_common = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+
+    end_effector_probe_clearance_common = RewTerm(
+        func=mdp.arm_links_avoid_floating_ring_contact_soft_exp,
+        weight=0.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=["link[2-6]", "end_effector"]),
+            "threshold": 0.5,
+            "contact_std": 1.0,
+            "floating_ring_terrain_type": 3,
+            "platform_width": 2.0,
+            "ring_width_range": (0.6, 1.8),
+            "margin": 0.4,
+            "gate_std": 0.25,
+        },
+    )
 
     # arm_contact = RewTerm(
     #     func=mdp.undesired_contacts,
