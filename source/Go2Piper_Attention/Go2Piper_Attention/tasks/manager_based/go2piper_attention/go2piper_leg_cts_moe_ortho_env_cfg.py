@@ -154,7 +154,7 @@ CTS_MOE_PLAY_LONG_TERRAINS_2_CFG = TerrainGeneratorCfg(
         ),
         "descend": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
             proportion=1.0,
-            step_height_range=(0.02, 0.22),
+            step_height_range=(0.10, 0.10),
             step_width=0.31,
             platform_width=2.0,
         ),
@@ -631,7 +631,7 @@ class RewardsCfg:
         func=mdp.base_height_tracking, 
         weight=0.5,
          params={ 
-                 "desired_height": 0.3, 
+                 "desired_height": 0.28, 
                  "std": 0.02}
     )
 
@@ -661,14 +661,14 @@ class RewardsCfg:
         func=mdp.base_height_tracking, 
         weight=0.5,
          params={ 
-                 "desired_height": 0.3, 
+                 "desired_height": 0.28, 
                  "std": 0.02}
     )
     track_base_height_exp_descend = RewTerm(
         func=mdp.base_height_tracking,
         weight=0.5,
          params={
-                 "desired_height": 0.3,
+                 "desired_height": 0.28,
                  "std": 0.02}
     )
 
@@ -679,28 +679,40 @@ class RewardsCfg:
         func=mdp.base_height_tracking, 
         weight=0.5,
          params={ 
-                 "desired_height": 0.3, 
+                 "desired_height": 0.28, 
                  "std": 0.02}
     )
 
 
-    lin_vel_z_l2_rough = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.5)
-    lin_vel_z_l2_floating_ring = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
-    lin_vel_z_l2_ascend = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
-    lin_vel_z_l2_descend = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
-    lin_vel_z_l2_flat = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
+    lin_vel_z_l2_rough = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    lin_vel_z_l2_floating_ring = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    lin_vel_z_l2_ascend = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    lin_vel_z_l2_descend = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
+    lin_vel_z_l2_flat = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.0)
 
 
-    ang_vel_xy_l2_common = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.02) # -0.05
-    dof_torques_l2_common = RewTerm(func=mdp.joint_torques_l2_Go2, weight=-2.0e-5) # - 0.0002
-    dof_acc_l2_common = RewTerm(func=mdp.joint_acc_l2_Go2, weight=-2.5e-7)
-    action_rate_l2_common = RewTerm(func=mdp.action_rate_l2_Go2, weight=-0.01)
+    ang_vel_xy_l2_common = RewTerm(func=mdp.ang_vel_xy_l2, weight=-0.05)
+    dof_torques_l2_common = RewTerm(func=mdp.joint_torques_l2, weight=-1.0e-5)
+    hip_torques_max_common = RewTerm(
+        func=mdp.joint_torques_max, params={"joint_names": ".*_hip_joint"}, weight=-8.0e-5
+    )
+    thigh_torques_max_common = RewTerm(
+        func=mdp.joint_torques_max, params={"joint_names": ".*_thigh_joint"}, weight=-8.0e-5
+    )
+    calf_torques_max_common = RewTerm(
+        func=mdp.joint_torques_max, params={"joint_names": ".*_calf_joint"}, weight=-2.0e-5
+    )
+    dof_acc_l2_common = RewTerm(func=mdp.joint_acc_l2, weight=-2.5e-7)
+    action_rate_l2_common = RewTerm(func=mdp.action_rate_l2, weight=-0.01)
+    joint_power_common = RewTerm(func=mdp.joint_power, weight=-2e-5)
 
     feet_air_time_common = RewTerm(
-        func=mdp.feet_air_time_variance_penalty,
-        weight= 0.5,
+        func=mdp.feet_air_time,
+        weight=0.5,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "command_name": "base_velocity",
+            "threshold": 0.5,
         },
     )
     feet_slide_common = RewTerm(
@@ -708,6 +720,7 @@ class RewardsCfg:
         weight= -0.1,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
         },
     )
 
@@ -740,6 +753,25 @@ class RewardsCfg:
             "command_name": "base_velocity",
         },
     )
+    feet_air_time_flat = RewTerm(
+        func=mdp.feet_air_time,
+        weight=0.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "command_name": "base_velocity",
+            "threshold": 0.35,
+        },
+    )
+    feet_long_contact_flat = RewTerm(
+        func=mdp.feet_long_contact_penalty,
+        weight=0.0,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "max_contact_time": 0.35,
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+        },
+    )
     feet_height_floating_ring = RewTerm(
         func=mdp.feet_height,
         weight=0.0,
@@ -763,44 +795,20 @@ class RewardsCfg:
 
     feet_long_air_common = RewTerm(
         func=mdp.feet_long_air_penalty,
-        weight=-0.1,
+        weight=-0.5,
         params={
             "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "max_air_time": 0.5,
+            "max_air_time": 1.0,
         },
     )
-    feet_long_contact_common = RewTerm(
-        func=mdp.feet_long_contact_penalty,
-        weight=-0.1,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-            "max_contact_time": 0.5,
-            "command_name": "base_velocity",
-            "command_threshold": 0.1,
-        },
+    air_time_variance_common = RewTerm(
+        func=mdp.feet_air_time_variance_penalty,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot")},
     )
     
 
-    feet_height_body_ascend = RewTerm(
-        func=mdp.feet_height_body,
-        weight=0.0,
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "tanh_mult": 2.0,
-            "target_height": -0.2,
-            "command_name": "base_velocity",
-        },
-    )
-    feet_height_body_descend = RewTerm(
-        func=mdp.feet_height_body,
-        weight=0.0,
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
-            "tanh_mult": 2.0,
-            "target_height": -0.2,
-            "command_name": "base_velocity",
-        },
-    )
+
     
 
     # feet_height_common = RewTerm(
@@ -827,66 +835,91 @@ class RewardsCfg:
 
     joint_mirror_common = RewTerm(
         func=mdp.joint_mirror,
-        weight=-0.1,
+        weight=-0.15,
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "mirror_joints": [["FR.*", "RL.*"], ["FL.*", "RR.*"]],
+            "mirror_joints": [
+                ["FR.*", "RL.*"],
+                ["FL.*", "RR.*"],
+            ],
         },
     )
 
-    gait_reward_common = RewTerm(
-        func=mdp.GaitReward,
-        weight=0.1,
-        # params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"])},
-        params={
-            "std": 0.1,
-            "command_name": "base_velocity",
-            "max_err": 0.5,
-            "velocity_threshold": 0.1,
-            "command_threshold": 0.1,            
-            "synced_feet_pair_names": [["FR.*", "RL.*"], ["FL.*", "RR.*"]],
-            "asset_cfg": SceneEntityCfg("robot"),
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
-        },    
-    )
+    # gait_reward_common = RewTerm(
+    #     func=mdp.GaitReward,
+    #     weight=0.1,
+    #     # params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"])},
+    #     params={
+    #         "std": 0.1,
+    #         "command_name": "base_velocity",
+    #         "max_err": 0.5,
+    #         "velocity_threshold": 0.1,
+    #         "command_threshold": 0.1,            
+    #         "synced_feet_pair_names": [["FR.*", "RL.*"], ["FL.*", "RR.*"]],
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #     },    
+    # )
+
+    # gait_reward_flat = RewTerm(
+    #     func=mdp.GaitReward,
+    #     weight=0.0,
+    #     params={
+    #         "std": 0.08,
+    #         "command_name": "base_velocity",
+    #         "max_err": 0.4,
+    #         "velocity_threshold": 0.1,
+    #         "command_threshold": 0.1,
+    #         "synced_feet_pair_names": [["FR.*", "RL.*"], ["FL.*", "RR.*"]],
+    #         "asset_cfg": SceneEntityCfg("robot"),
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+    #     },
+    # )
 
     hip_deviation_common = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.4,
+        weight=-0.1,
         # params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_hip_joint", ".*_thigh_joint", ".*_calf_joint"])},
         params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_hip_joint"])},
     )
 
     joint_deviation_common = RewTerm(
         func=mdp.joint_deviation_l1,
-        weight=-0.04,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_thigh_joint", ".*_calf_joint"])},
-    )
-
-    F_joint_deviation_common = RewTerm(
-        func=mdp.joint_deviation_l1,
-        weight=-0.04,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["F.*_thigh_joint", "F.*_calf_joint"])},
-    )
-
-
-    R_joint_deviation_common = RewTerm(
-        func=mdp.joint_deviation_l1,
-        weight=-0.04,
-        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["R.*_thigh_joint", "R.*_calf_joint"])},
-    )
-
-
-    action_smoothness_common = RewTerm(
-        func=mdp.leg_action_smoothness_penalty,
         weight=-0.02,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=[".*_calf_joint", ".*_thigh_joint"])},
     )
+
+    # arm_deviation_common = RewTerm(
+    #     func=mdp.joint_deviation_l1,
+    #     weight=-0.1,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["joint.*"])},
+    # )
+
+    # F_joint_deviation_common = RewTerm(
+    #     func=mdp.joint_deviation_l1,
+    #     weight=-0.04,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["F.*_thigh_joint", "F.*_calf_joint"])},
+    # )
+
+
+    # R_joint_deviation_common = RewTerm(
+    #     func=mdp.joint_deviation_l1,
+    #     weight=-0.04,
+    #     params={"asset_cfg": SceneEntityCfg("robot", joint_names=["R.*_thigh_joint", "R.*_calf_joint"])},
+    # )
+
+
+    # action_smoothness_common = RewTerm(
+    #     func=mdp.leg_action_smoothness_penalty,
+    #     weight=-0.02,
+    # )
     
     flat_orientation_l2_rough = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     flat_orientation_l2_floating_ring = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     flat_orientation_l2_ascend = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     flat_orientation_l2_descend = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     flat_orientation_l2_flat = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    dof_pos_limits_common = RewTerm(func=mdp.joint_pos_limits, weight=-1.0)
 
     # height_reward = RewTerm(func=mdp.base_height_l2, weight=-2.0, params={"target_height": 0.31, "std":0.03})
 

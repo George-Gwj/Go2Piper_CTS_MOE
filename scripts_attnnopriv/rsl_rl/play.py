@@ -91,7 +91,7 @@ parser.add_argument(
 parser.add_argument(
     "--print_router_interval",
     type=int,
-    default=24,
+    default=0,
     help="Print MoE router weights every N play steps. Set 0 to disable.",
 )
 parser.add_argument(

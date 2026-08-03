@@ -1294,6 +1294,31 @@ def joint_torques_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEn
     return torch.sum(torch.square(asset.data.applied_torque[:, asset_cfg.joint_ids]), dim=1)
 
 
+def joint_torques_max(
+    env: ManagerBasedRLEnv,
+    joint_names: list[str],
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize the maximum absolute torque within a joint group."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    joint_indices, _ = asset.find_joints(joint_names)
+    torques = asset.data.applied_torque[:, joint_indices]
+    max_abs_torque = torch.max(torch.abs(torques), dim=1).values
+    return torch.square(max_abs_torque)
+
+
+def joint_power(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Penalize mechanical joint power."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    return torch.sum(
+        torch.abs(
+            asset.data.joint_vel[:, asset_cfg.joint_ids]
+            * asset.data.applied_torque[:, asset_cfg.joint_ids]
+        ),
+        dim=1,
+    )
+
+
 
 
 def joint_vel_l1(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg) -> torch.Tensor:

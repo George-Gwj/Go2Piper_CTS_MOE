@@ -53,33 +53,34 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         
         # Common reward weights.  Reward terms ending with "_common" are used by all tasks.
         self.rewards.track_ang_vel_z_exp_common.weight = 2.0
-        self.rewards.ang_vel_xy_l2_common.weight = -0.1
+        self.rewards.ang_vel_xy_l2_common.weight = -0.05
         self.rewards.dof_torques_l2_common.weight = -1.0e-5 
         self.rewards.dof_acc_l2_common.weight =  -2.5e-7
-        self.rewards.action_rate_l2_common.weight = -0.02
-        self.rewards.feet_air_time_common.weight = -0.1
-        self.rewards.feet_slide_common.weight = -0.2
+        self.rewards.action_rate_l2_common.weight = -0.01
+        self.rewards.feet_air_time_common.weight = 0.5
+        self.rewards.feet_slide_common.weight = -0.1
         # self.rewards.F_feet_air_time_common.weight = 0.0 #0.5
         # self.rewards.R_feet_air_time_common.weight = 0.0 #0.5
         # self.rewards.feet_height_common.weight = -0.2 #TODO # -0.2
         # self.rewards.feet_height_body_common.weight = -0.0 # 0.5 #TODO 
-        self.rewards.foot_contact_common.weight = 0.005
-        self.rewards.joint_mirror_common.weight =  -0.05
-        self.rewards.gait_reward_common.weight = 0.5 # 1.0
-        self.rewards.feet_long_air_common.weight =  -0.3
-        self.rewards.feet_long_contact_common.weight = -0.3
-        self.rewards.hip_deviation_common.weight = -0.2
-        self.rewards.joint_deviation_common.weight = -0.00 # 0.0
-        self.rewards.F_joint_deviation_common.weight = -0.06 # 0.1
-        self.rewards.R_joint_deviation_common.weight = -0.06 # 0.15
-        self.rewards.action_smoothness_common.weight = -0.04 # -0.02
+        self.rewards.foot_contact_common.weight = 0.0
+        self.rewards.joint_mirror_common.weight =  -0.15
+        # self.rewards.gait_reward_common.weight = 0.5 # 1.0
+        self.rewards.feet_long_air_common.weight =  -1.0
+        # self.rewards.feet_long_contact_common.weight = -0.0
+        self.rewards.hip_deviation_common.weight = -0.1
+        self.rewards.joint_deviation_common.weight = -0.02 # 0.0
+        self.rewards.air_time_variance_common.weight = -1.5
+        # self.rewards.F_joint_deviation_common.weight = -0.06 # 0.1
+        # self.rewards.R_joint_deviation_common.weight = -0.06 # 0.15
+        # self.rewards.action_smoothness_common.weight = -0.02 # -0.02
 
 
         # Rough reward weights:
         # Add RewTerm fields ending with "_rough" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_rough.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_rough.weight = 2.0
-        self.rewards.track_base_height_exp_rough.weight = 1.0
+        self.rewards.track_lin_vel_x_exp_rough.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_rough.weight = 0.5
+        self.rewards.track_base_height_exp_rough.weight = 0.25
         self.rewards.lin_vel_z_l2_rough.weight = -2.5
         self.rewards.thigh_contact_rough.weight = -1.0
         self.rewards.calf_contact_rough.weight = -1.0
@@ -89,10 +90,10 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
 
         # Floating-ring reward weights:
         # Add RewTerm fields ending with "_floating_ring" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_floating_ring.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_floating_ring.weight = 2.0
+        self.rewards.track_lin_vel_x_exp_floating_ring.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_floating_ring.weight = 0.5
         # self.rewards.track_base_height_exp_floating_ring.weight = 0.0
-        self.rewards.track_base_height_exp_floating_ring.weight = 2.0
+        self.rewards.track_base_height_exp_floating_ring.weight = 0.5
         self.rewards.lin_vel_z_l2_floating_ring.weight = -1.0
         self.rewards.thigh_contact_floating_ring.weight = -1.0
         self.rewards.calf_contact_floating_ring.weight = -1.0
@@ -102,40 +103,44 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
 
         # Ascend reward weights:
         # Add RewTerm fields ending with "_ascend" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_ascend.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_ascend.weight = 2.0
-        self.rewards.track_base_height_exp_ascend.weight = 1.0
+        self.rewards.track_lin_vel_x_exp_ascend.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_ascend.weight = 0.5
+        self.rewards.track_base_height_exp_ascend.weight = 0.25
         self.rewards.lin_vel_z_l2_ascend.weight = -0.25
         self.rewards.thigh_contact_ascend.weight = -0.5
         self.rewards.calf_contact_ascend.weight = -0.5
         self.rewards.base_contact_ascend.weight = -0.5
         self.rewards.flat_orientation_l2_ascend.weight = -0.5 # -0.5
-        self.rewards.feet_height_body_ascend.weight = -1.0
+        # self.rewards.feet_height_body_ascend.weight = -1.0
 
         # Descend reward weights:
         # Add RewTerm fields ending with "_descend" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_descend.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_descend.weight = 2.0
-        self.rewards.track_base_height_exp_descend.weight = 1.0
+        self.rewards.track_lin_vel_x_exp_descend.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_descend.weight = 0.5
+        self.rewards.track_base_height_exp_descend.weight = 0.25
         self.rewards.lin_vel_z_l2_descend.weight = -0.25
         self.rewards.thigh_contact_descend.weight = -0.5
         self.rewards.calf_contact_descend.weight = -0.5
         self.rewards.base_contact_descend.weight = -0.5
-        self.rewards.flat_orientation_l2_descend.weight = -0.5
-        self.rewards.feet_height_body_descend.weight = -1.0
-
+        self.rewards.flat_orientation_l2_descend.weight = -0.2
+        # self.rewards.feet_height_body_descend.weight = -1.0
+        # self.rewards.R_feet_air_time_descend.weight = 0.6
+        # self.rewards.R_feet_long_contact_descend.weight = -0.3
 
         # Flat reward weights:
         # Add RewTerm fields ending with "_flat" in RewardsCfg, then configure them here.
-        self.rewards.track_lin_vel_x_exp_flat.weight = 2.0
-        self.rewards.track_lin_vel_y_exp_flat.weight = 2.0
-        self.rewards.track_base_height_exp_flat.weight = 1.0
+        self.rewards.track_lin_vel_x_exp_flat.weight = 4.0
+        self.rewards.track_lin_vel_y_exp_flat.weight = 0.5
+        self.rewards.track_base_height_exp_flat.weight = 0.25
         self.rewards.lin_vel_z_l2_flat.weight = -2.5
         self.rewards.thigh_contact_flat.weight = -0.5
         self.rewards.calf_contact_flat.weight = -0.5
         self.rewards.base_contact_flat.weight = -0.5
         self.rewards.flat_orientation_l2_flat.weight = -1.5 # -0.5
         self.rewards.feet_height_flat.weight = -0.2
+        self.rewards.feet_air_time_flat.weight = 0.8
+        self.rewards.feet_long_contact_flat.weight = -0.25
+        # self.rewards.gait_reward_flat.weight = 0.8
 
 
 
@@ -146,7 +151,7 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         super().__post_init__()
         # self.scene.terrain.terrain_type = "plane"
         # self.scene.terrain.terrain_generator = None
-        self.scene.terrain.terrain_generator = CTS_MOE_TERRAINS_CFG # CTS_MOE_PLAY_LONG_TERRAINS_CFG # CTS_MOE_PLAY_LONG_TERRAINS_CFG
+        self.scene.terrain.terrain_generator = CTS_MOE_PLAY_LONG_TERRAINS_2_CFG # CTS_MOE_PLAY_LONG_TERRAINS_CFG # CTS_MOE_PLAY_LONG_TERRAINS_CFG
         self.scene.terrain.max_init_terrain_level = 0
         self.curriculum.terrain_levels = None
         self.multi_task_rewards.play_long_terrain = True
@@ -155,7 +160,7 @@ class Go2PiperMoEOrthoEnvCfg_PLAY(Go2PiperMoEOrthoEnvCfg):
         # make a smaller scene for play
         self.scene.num_envs = 1
         self.scene.env_spacing = 8.0
-        self.episode_length_s = 60.0
+        self.episode_length_s = 10.0
         # disable randomization for play
         self.observations.proprio.enable_corruption = False
         self.observations.proprio_history.enable_corruption = False

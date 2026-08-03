@@ -616,11 +616,20 @@ class OrthogonalMoEActor(nn.Module):
     def _task_id_from_proprio(self, proprio: torch.Tensor) -> torch.Tensor:
         return torch.round(proprio[:, -1]).long().clamp(min=0, max=self.num_tasks - 1)
 
-    def _router_input(self, z: torch.Tensor, proprio: torch.Tensor) -> torch.Tensor:
+    def _resolve_task_id(self, proprio: torch.Tensor, task_id: torch.Tensor | None = None) -> torch.Tensor:
+        if task_id is None:
+            return self._task_id_from_proprio(proprio)
+        if task_id.dim() != 1 or task_id.shape[0] != proprio.shape[0]:
+            raise ValueError(f"task_id must be [B] with B={proprio.shape[0]}, got {tuple(task_id.shape)}")
+        if torch.any(task_id < 0) or torch.any(task_id >= self.num_tasks):
+            raise ValueError(f"task_id values must be in [0, {self.num_tasks - 1}]")
+        return task_id.long().view(-1)
+
+    def _router_input(self, z: torch.Tensor, proprio: torch.Tensor, task_id: torch.Tensor | None = None) -> torch.Tensor:
         if self.router_input_source == "latent":
             return z
 
-        task_id = self._task_id_from_proprio(proprio)
+        task_id = self._resolve_task_id(proprio, task_id)
         return F.one_hot(task_id, num_classes=self.num_tasks).to(dtype=proprio.dtype)
 
     def _action_from_feature(self, feature: torch.Tensor, task_id: torch.Tensor) -> torch.Tensor:
@@ -649,11 +658,12 @@ class OrthogonalMoEActor(nn.Module):
         self,
         z: torch.Tensor,
         proprio: torch.Tensor,
+        task_id: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
         self._check_inputs(z, proprio)
-        task_id = self._task_id_from_proprio(proprio)
+        task_id = self._resolve_task_id(proprio, task_id)
         actor_input = torch.cat([z, proprio], dim=-1)
-        router_input = self._router_input(z, proprio)
+        router_input = self._router_input(z, proprio, task_id)
         router_logits = self.router(router_input)
         gate_coeffs = self.apply_gate_activation(router_logits)
 
@@ -982,18 +992,20 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         height_scan: torch.Tensor,
         privileged_obs: torch.Tensor,
         proprio: torch.Tensor,
+        task_id: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         z_teacher = self.encode_teacher(height_scan, privileged_obs)
-        return self.moe_actor(z_teacher, proprio)
+        return self.moe_actor(z_teacher, proprio, task_id=task_id)
 
     def act_student(
         self,
         proprio_history: torch.Tensor,
         perception: torch.Tensor,
         proprio: torch.Tensor,
+        task_id: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         z_student = self.encode_student(proprio_history, perception)
-        return self.moe_actor(z_student, proprio)
+        return self.moe_actor(z_student, proprio, task_id=task_id)
 
     def evaluate_teacher(
         self,
@@ -1087,7 +1099,7 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         else:
             raise ValueError("mode must be 'teacher', 'student', or 'mixed'")
 
-        actor_output = self.moe_actor(z, proprio)
+        actor_output = self.moe_actor(z, proprio, task_id=task_id)
         actor_extras = {}
         if len(actor_output) == 5:
             action_mean, router_weights, expert_actions, router_logits, actor_extras = actor_output
