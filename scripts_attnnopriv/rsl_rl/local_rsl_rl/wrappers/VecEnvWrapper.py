@@ -17,8 +17,8 @@ class RslRlVecEnvWrapper(VecEnv):
     """CTS-MoE-only IsaacLab wrapper for RSL-RL.
 
     The wrapper exposes structured observations for `StructureAwareCTSMoEPolicy`:
-    `proprio`, `proprio_history`, `privileged_obs`, `height_scan`, `perception`,
-    and `task_id`.
+        `proprio`, `proprio_history`, `privileged_obs`, optional `height_scan`,
+        `perception`, and `task_id`.
     """
 
     def __init__(self, env: ManagerRLEnv | DirectRLEnv, clip_actions: float | None = None):
@@ -43,7 +43,7 @@ class RslRlVecEnvWrapper(VecEnv):
         if not hasattr(self.unwrapped, "observation_manager"):
             raise ValueError("CTS-MoE wrapper requires an IsaacLab observation_manager.")
         group_dims = self.unwrapped.observation_manager.group_obs_dim
-        required_groups = ("proprio", "proprio_history", "privileged_obs", "height_scan", "depth")
+        required_groups = ("proprio", "proprio_history", "privileged_obs", "depth")
         missing_groups = [name for name in required_groups if name not in group_dims]
         if missing_groups:
             raise ValueError(f"CTS-MoE observation groups are missing: {missing_groups}")
@@ -148,7 +148,7 @@ class RslRlVecEnvWrapper(VecEnv):
         proprio = obs_dict["proprio"]
         proprio_history = self._reshape_proprio_history(obs_dict["proprio_history"])
         privileged_obs = obs_dict["privileged_obs"]
-        height_scan = self._extract_single_term_group(obs_dict["height_scan"], "height_scan")
+        height_scan = self._extract_optional_single_term_group(obs_dict, "height_scan", "height_scan")
         perception = self._extract_single_term_group(obs_dict["depth"], "depth_image")
 
         task_id = obs_dict.get("task_id")
@@ -170,6 +170,17 @@ class RslRlVecEnvWrapper(VecEnv):
         if isinstance(group_obs, dict):
             return group_obs[term_name]
         return group_obs
+
+    def _extract_optional_single_term_group(
+        self,
+        obs_dict: dict,
+        group_name: str,
+        term_name: str,
+    ) -> torch.Tensor:
+        group_obs = obs_dict.get(group_name)
+        if group_obs is not None:
+            return self._extract_single_term_group(group_obs, term_name)
+        return torch.empty((self.num_envs, 0), device=self.device)
 
     def _reshape_proprio_history(self, proprio_history: torch.Tensor) -> torch.Tensor:
         if proprio_history.dim() == 3:

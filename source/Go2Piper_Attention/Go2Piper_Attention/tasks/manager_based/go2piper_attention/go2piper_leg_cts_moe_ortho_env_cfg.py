@@ -331,6 +331,15 @@ class EventCfg:
         },
     )
 
+    arm_com = EventTerm(
+        func=mdp.randomize_rigid_body_com,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["link[1-6]", "end_effector"]),
+            "com_range": {"x": (-0.05, 0.05), "y": (-0.05, 0.05), "z": (-0.02, 0.02)},
+        },
+    )
+
     # add_ee_mass = EventTerm(
     #     func=mdp.randomize_rigid_body_mass,
     #     mode="startup",
@@ -407,6 +416,10 @@ class EventCfg:
         interval_range_s=(10.0, 15.0),
         params={"velocity_range": {"x": (-0.2, 0.2), "y": (-0.2, 0.2)}},
     )
+
+
+
+
 
 
 ##

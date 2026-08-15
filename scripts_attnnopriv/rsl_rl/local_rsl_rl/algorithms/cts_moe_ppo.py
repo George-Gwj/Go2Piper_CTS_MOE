@@ -18,7 +18,7 @@ class CTSMoEPPO:
     - mixed: teacher PPO plus student latent distillation on a rollout subset.
     """
 
-    VALID_TRAINING_MODES = ("teacher", "mixed", "student_distill")
+    VALID_TRAINING_MODES = ("teacher", "mixed", "student_distill", "student_policy")
 
     def __init__(
         self,
@@ -41,6 +41,8 @@ class CTSMoEPPO:
         training_mode: str = "mixed",
         distillation_loss_coef: float = 1.0,
         student_rollout_ratio: float = 0.15,
+        depth_task_loss_coef: float = 0.0,
+        depth_task_learning_rate: float | None = None,
         router_entropy_coef: float = 0.0,
         router_balance_coef: float = 0.0,
         router_logit_l2_coef: float = 0.0,
@@ -61,11 +63,21 @@ class CTSMoEPPO:
         self.storage = None
         self.transition = CTSMoERolloutStorage.Transition()
 
-        self.optimizer = optim.Adam(self.policy.ppo_parameters(), lr=learning_rate, eps=eps)
+        self.optimizer = optim.Adam(self._ppo_update_parameters(training_mode), lr=learning_rate, eps=eps)
         self.student_optimizer = optim.Adam(
             self.policy.student_parameters(),
             lr=learning_rate if student_learning_rate is None else student_learning_rate,
             eps=eps,
+        )
+        depth_task_parameters = list(self.policy.depth_task_parameters())
+        self.depth_task_optimizer = (
+            optim.Adam(
+                depth_task_parameters,
+                lr=learning_rate if depth_task_learning_rate is None else depth_task_learning_rate,
+                eps=eps,
+            )
+            if depth_task_parameters
+            else None
         )
 
         self.num_learning_epochs = num_learning_epochs
@@ -84,6 +96,7 @@ class CTSMoEPPO:
             raise ValueError(f"training_mode must be one of {self.VALID_TRAINING_MODES}, got {training_mode!r}")
         self.training_mode = training_mode
         self.distillation_loss_coef = distillation_loss_coef
+        self.depth_task_loss_coef = depth_task_loss_coef
         if student_rollout_ratio < 0.0 or student_rollout_ratio > 1.0:
             raise ValueError("student_rollout_ratio must be in [0, 1]")
         self.student_rollout_ratio = student_rollout_ratio
@@ -236,6 +249,9 @@ class CTSMoEPPO:
         mean_router_balance_loss = 0.0
         mean_router_logit_l2_loss = 0.0
         mean_orth_loss = 0.0
+        mean_depth_task_loss = 0.0
+        mean_depth_task_accuracy = 0.0
+        num_depth_task_updates = 0
         orth_metric_sums: dict[str, float] = {}
         num_orth_metric_updates = 0
         mean_returns_norm_mean = 0.0
@@ -356,12 +372,31 @@ class CTSMoEPPO:
 
             self.optimizer.zero_grad()
             ppo_loss.backward()
-            grad_norm = nn.utils.clip_grad_norm_(list(self.policy.ppo_parameters()), self.max_grad_norm)
+            grad_norm = nn.utils.clip_grad_norm_(self._ppo_update_parameters(), self.max_grad_norm)
             if not torch.isfinite(grad_norm):
                 self.optimizer.zero_grad(set_to_none=True)
                 skipped_nonfinite_updates += 1
                 continue
             self.optimizer.step()
+
+            if (
+                self.depth_task_optimizer is not None
+                and self.depth_task_loss_coef > 0.0
+                and "depth_task_logits" in out
+            ):
+                depth_task_logits = self.policy.predict_task_from_depth(perception_batch)
+                depth_task_loss = F.cross_entropy(depth_task_logits, task_id_batch.long().view(-1))
+                depth_task_aux_loss = self.depth_task_loss_coef * depth_task_loss
+                if torch.isfinite(depth_task_aux_loss):
+                    self.depth_task_optimizer.zero_grad()
+                    depth_task_aux_loss.backward()
+                    nn.utils.clip_grad_norm_(list(self.policy.depth_task_parameters()), self.max_grad_norm)
+                    self.depth_task_optimizer.step()
+                    mean_depth_task_loss += depth_task_loss.item()
+                    mean_depth_task_accuracy += (
+                        depth_task_logits.argmax(dim=-1) == task_id_batch.long().view(-1)
+                    ).float().mean().item()
+                    num_depth_task_updates += 1
 
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
@@ -434,6 +469,8 @@ class CTSMoEPPO:
             "router_balance": mean_router_balance_loss / num_updates,
             "router_logit_l2": mean_router_logit_l2_loss / num_updates,
             "orth_loss": mean_orth_loss / num_updates,
+            "depth_task_loss": mean_depth_task_loss / max(num_depth_task_updates, 1),
+            "depth_task_accuracy": mean_depth_task_accuracy / max(num_depth_task_updates, 1),
             "student_rollout_ratio": self.storage.student_masks.float().mean().item(),
             "skipped_nonfinite_updates": skipped_nonfinite_updates,
         }
@@ -458,13 +495,20 @@ class CTSMoEPPO:
         self.storage.clear()
         return loss_dict
 
+    def _ppo_update_parameters(self, training_mode: str | None = None) -> list[torch.nn.Parameter]:
+        training_mode = self.training_mode if training_mode is None else training_mode
+        parameters = list(self.policy.ppo_parameters())
+        if training_mode == "student_policy":
+            parameters += list(self.policy.student_parameters())
+        return parameters
+
     def _resolve_student_mask(
         self,
         num_envs: int,
         device: torch.device | str,
         student_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
-        if self.training_mode == "teacher":
+        if self.training_mode in ("teacher", "student_policy"):
             return torch.zeros(num_envs, dtype=torch.bool, device=device)
 
         if student_mask is not None:
@@ -524,6 +568,15 @@ class CTSMoEPPO:
                 "perception": perception,
                 "student_mask": student_mask,
                 "detach_student_in_mixed": True,
+                "return_value": return_value,
+            }
+        if self.training_mode == "student_policy":
+            return {
+                "mode": "student",
+                "proprio": proprio_history[:, -1],
+                "task_id": task_id,
+                "proprio_history": proprio_history,
+                "perception": perception,
                 "return_value": return_value,
             }
         raise NotImplementedError(f"forward path for training_mode={self.training_mode!r} is not implemented yet")

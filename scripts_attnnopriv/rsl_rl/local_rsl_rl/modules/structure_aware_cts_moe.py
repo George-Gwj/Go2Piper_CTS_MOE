@@ -340,7 +340,7 @@ class TeacherEncoder(nn.Module):
 
 
 class StudentEncoder(nn.Module):
-    """Student encoder using proprioception history and raycaster depth image."""
+    """Student encoder using proprioception history, optionally with perception."""
 
     def __init__(
         self,
@@ -358,8 +358,8 @@ class StudentEncoder(nn.Module):
         activation: str | type[nn.Module] | nn.Module = "elu",
     ):
         super().__init__()
-        if perception_type not in ("depth", "grid", "vector"):
-            raise ValueError("perception_type must be 'depth', 'grid', or 'vector'")
+        if perception_type not in ("depth", "grid", "vector", "proprio_only"):
+            raise ValueError("perception_type must be 'depth', 'grid', 'vector', or 'proprio_only'")
         if perception_type == "vector" and perception_dim is None:
             raise ValueError("perception_dim is required when perception_type='vector'")
 
@@ -374,7 +374,14 @@ class StudentEncoder(nn.Module):
             activation=activation,
         )
 
-        if perception_type in ("depth", "grid"):
+        if perception_type == "proprio_only":
+            self.perception_encoder = None
+            self.temporal_gru = None
+            self.projection = nn.Sequential(
+                nn.Linear(proprio_feature_dim, latent_dim),
+                nn.LayerNorm(latent_dim),
+            )
+        elif perception_type in ("depth", "grid"):
             self.perception_encoder = GridEncoder(
                 in_channels=perception_channels,
                 output_dim=depth_feature_dim,
@@ -389,18 +396,19 @@ class StudentEncoder(nn.Module):
                 activation=activation,
             )
 
-        self.temporal_gru = nn.GRU(
-            input_size=depth_feature_dim + proprio_dim,
-            hidden_size=gru_hidden_dim,
-            num_layers=gru_num_layers,
-            batch_first=True,
-        )
-        self.projection = nn.Sequential(
-            nn.Linear(gru_hidden_dim + proprio_feature_dim, latent_dim),
-            nn.LayerNorm(latent_dim),
-        )
+        if perception_type != "proprio_only":
+            self.temporal_gru = nn.GRU(
+                input_size=depth_feature_dim + proprio_dim,
+                hidden_size=gru_hidden_dim,
+                num_layers=gru_num_layers,
+                batch_first=True,
+            )
+            self.projection = nn.Sequential(
+                nn.Linear(gru_hidden_dim + proprio_feature_dim, latent_dim),
+                nn.LayerNorm(latent_dim),
+            )
 
-    def forward(self, proprio_history: torch.Tensor, perception: torch.Tensor) -> torch.Tensor:
+    def forward(self, proprio_history: torch.Tensor, perception: torch.Tensor | None = None) -> torch.Tensor:
         if proprio_history.dim() != 3:
             raise ValueError(
                 f"proprio_history must be [B, T, proprio_dim], got {tuple(proprio_history.shape)}"
@@ -409,12 +417,39 @@ class StudentEncoder(nn.Module):
             raise ValueError(f"Expected proprio_dim={self.proprio_dim}, got {proprio_history.shape[-1]}")
 
         proprio_history_feature = self.proprio_history_encoder(proprio_history.flatten(start_dim=1))
+        if self.perception_type == "proprio_only":
+            return self.projection(proprio_history_feature)
+        if perception is None:
+            raise ValueError("perception is required unless perception_type='proprio_only'")
         depth_feature = self.perception_encoder(perception)
         current_proprio = proprio_history[:, -1]
         temporal_input = torch.cat([depth_feature, current_proprio], dim=-1).unsqueeze(1)
         _, h_n = self.temporal_gru(temporal_input)
         temporal_feature = h_n[-1]
         return self.projection(torch.cat([temporal_feature, proprio_history_feature], dim=-1))
+
+
+class DepthTaskPredictor(nn.Module):
+    """MLP classifier that predicts the terrain task id from a depth image."""
+
+    def __init__(
+        self,
+        num_tasks: int,
+        hidden_dims: Sequence[int] = (512, 256),
+        activation: str | type[nn.Module] | nn.Module = "elu",
+    ):
+        super().__init__()
+        self.num_tasks = num_tasks
+        self.net = build_lazy_mlp(
+            hidden_dims=hidden_dims,
+            output_dim=num_tasks,
+            activation=activation,
+        )
+
+    def forward(self, depth: torch.Tensor) -> torch.Tensor:
+        if depth.dim() < 2:
+            raise ValueError(f"depth must include batch and feature dimensions, got {tuple(depth.shape)}")
+        return self.net(depth.flatten(start_dim=1))
 
 
 class MoEActor(nn.Module):
@@ -833,6 +868,8 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         student_depth_filters: Sequence[int] = (16, 32, 64),
         student_gru_hidden_dim: int = 256,
         student_gru_num_layers: int = 1,
+        depth_task_predictor_hidden_dims: Sequence[int] = (512, 256),
+        enable_depth_task_prediction: bool = False,
         actor_type: str = "cts_moe",
         num_experts: int = 4,
         num_tasks: int = 4,
@@ -865,6 +902,7 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             raise ValueError("actor_type must be 'cts_moe' or 'orthogonal_cts_moe'")
         self.actor_type = actor_type
         self.log_expert_metrics = log_expert_metrics
+        self.enable_depth_task_prediction = enable_depth_task_prediction
 
         self.teacher_encoder = TeacherEncoder(
             privileged_dim=privileged_dim,
@@ -895,6 +933,15 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             gru_hidden_dim=student_gru_hidden_dim,
             gru_num_layers=student_gru_num_layers,
             activation=activation,
+        )
+        self.depth_task_predictor = (
+            DepthTaskPredictor(
+                num_tasks=num_tasks,
+                hidden_dims=depth_task_predictor_hidden_dims,
+                activation=activation,
+            )
+            if enable_depth_task_prediction
+            else None
         )
         if actor_type == "orthogonal_cts_moe":
             self.moe_actor = OrthogonalMoEActor(
@@ -961,6 +1008,11 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         """Parameters for student encoder distillation updates."""
         yield from self.student_encoder.parameters()
 
+    def depth_task_parameters(self):
+        """Parameters for supervised visual terrain-task prediction."""
+        if self.depth_task_predictor is not None:
+            yield from self.depth_task_predictor.parameters()
+
     def get_action_distribution(self, action_mean: torch.Tensor, action_std: torch.Tensor) -> Normal:
         if not torch.isfinite(action_mean).all():
             bad_count = (~torch.isfinite(action_mean)).sum().item()
@@ -984,8 +1036,13 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             return_task_logits=return_task_logits,
         )
 
-    def encode_student(self, proprio_history: torch.Tensor, perception: torch.Tensor) -> torch.Tensor:
+    def encode_student(self, proprio_history: torch.Tensor, perception: torch.Tensor | None = None) -> torch.Tensor:
         return self.student_encoder(proprio_history, perception)
+
+    def predict_task_from_depth(self, perception: torch.Tensor) -> torch.Tensor:
+        if self.depth_task_predictor is None:
+            raise RuntimeError("Depth task prediction is disabled for this policy")
+        return self.depth_task_predictor(perception)
 
     def act_teacher(
         self,
@@ -1071,8 +1128,8 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             z_teacher = z
             z_student = None
         elif mode == "student":
-            if proprio_history is None or perception is None:
-                raise ValueError("student mode requires proprio_history and perception")
+            if proprio_history is None:
+                raise ValueError("student mode requires proprio_history")
             z = self.encode_student(proprio_history, perception)
             z_teacher = None
             z_student = z
@@ -1122,6 +1179,8 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             output["teacher_task_logits"] = teacher_task_logits
         if z_student is not None:
             output["z_student"] = z_student
+        if self.depth_task_predictor is not None and perception is not None:
+            output["depth_task_logits"] = self.predict_task_from_depth(perception)
         if student_mask is not None:
             output["student_mask"] = student_mask
 

@@ -331,6 +331,15 @@ class EventCfg:
         },
     )
 
+    arm_com = EventTerm(
+        func=mdp.randomize_rigid_body_com,
+        mode="startup",
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["link[1-6]", "end_effector"]),
+            "com_range": {"x": (-0.03, 0.03), "y": (-0.03, 0.03), "z": (-0.02, 0.02)},
+        },
+    )
+
     # add_ee_mass = EventTerm(
     #     func=mdp.randomize_rigid_body_mass,
     #     mode="startup",
@@ -567,7 +576,7 @@ class ObservationsCfg:
     privileged_obs: PrivilegedObsCfg = PrivilegedObsCfg()
 
     depth: Depth_ObsCfg = Depth_ObsCfg()
-    height_scan: HeightScan_ObsCfg = HeightScan_ObsCfg()
+    height_scan = None
 
 
 @configclass

@@ -143,10 +143,10 @@ class Go2PiperLegCTSMoETaskRouterSharedHeadRunnerCfg(Go2PiperCTSMoETeacherRunner
 
 @configclass
 class Go2PiperLegCTSMoELatentRouterTaskHeadsRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
-    """Teacher-only ablation: latent-conditioned router with task-specific action heads."""
+    """Depth-supervised student policy: proprio-history actor plus visual task predictor."""
 
-    experiment_name = "go2piper_leg_cts_moe_ortho_teacher_latent_router_task_heads"
-    load_checkpoint: str = "LegCTSMoEOrthoTeacherLatentRouterTaskHeads_.*.pt"
+    experiment_name = "go2piper_leg_cts_moe_ortho_depth_latent_router_task_heads"
+    load_checkpoint: str = "LegCTSMoEOrthoDepthLatentRouterTaskHeads_.*.pt"
 
     policy = Go2PiperLegCTSMoETeacherPolicyCfg(
         proprio_dim=46,
@@ -159,7 +159,7 @@ class Go2PiperLegCTSMoELatentRouterTaskHeadsRunnerCfg(Go2PiperCTSMoETeacherRunne
         teacher_privileged_feature_dim=32,
         teacher_height_hidden_dims=[512, 256],
         teacher_height_feature_dim=128,
-        student_perception_type="depth",
+        student_perception_type="proprio_only",
         student_perception_channels=1,
         student_proprio_hidden_dims=[512, 256],
         student_proprio_feature_dim=32,
@@ -167,6 +167,8 @@ class Go2PiperLegCTSMoELatentRouterTaskHeadsRunnerCfg(Go2PiperCTSMoETeacherRunne
         student_depth_feature_dim=128,
         student_gru_hidden_dim=256,
         student_gru_num_layers=1,
+        depth_task_predictor_hidden_dims=[512, 256],
+        enable_depth_task_prediction=True,
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
         gate_activation="tanh",
@@ -196,7 +198,12 @@ class Go2PiperLegCTSMoELatentRouterTaskHeadsRunnerCfg(Go2PiperCTSMoETeacherRunne
         activation="elu",
     )
 
-    algorithm = Go2PiperCTSMoETeacherAlgorithmCfg(
+    algorithm = Go2PiperCTSMoEAlgorithmCfg(
+        training_mode="student_policy",
+        student_rollout_ratio=0.0,
+        distillation_loss_coef=0.0,
+        depth_task_loss_coef=1.0,
+        depth_task_learning_rate=1e-4,
         router_logit_l2_coef=1e-4,
     )
 

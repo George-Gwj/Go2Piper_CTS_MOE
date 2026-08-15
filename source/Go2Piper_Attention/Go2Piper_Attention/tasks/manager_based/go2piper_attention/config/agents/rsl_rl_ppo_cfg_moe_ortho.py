@@ -40,6 +40,8 @@ class Go2PiperCTSMoEPolicyCfg:
     student_depth_feature_dim: int = 128
     student_gru_hidden_dim: int = 256
     student_gru_num_layers: int = 1
+    depth_task_predictor_hidden_dims: list[int] = [512, 256]
+    enable_depth_task_prediction: bool = False
 
     # Actor selection. "cts_moe" keeps the original action-level MoE.
     actor_type: str = "orthogonal_cts_moe"
@@ -104,6 +106,8 @@ class Go2PiperCTSMoEAlgorithmCfg(RslRlPpoAlgorithmCfg):
     # Student distillation.
     distillation_loss_coef: float = 1.0
     student_rollout_ratio: float = 0.15
+    depth_task_loss_coef: float = 0.0
+    depth_task_learning_rate: float | None = None
 
     # Router auxiliary losses.
     router_entropy_coef: float = 0.0
