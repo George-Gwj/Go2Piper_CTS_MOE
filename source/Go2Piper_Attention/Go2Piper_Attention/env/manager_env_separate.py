@@ -166,6 +166,7 @@ class ManagerRLEnvSeparate(ManagerRLEnv):
                 self.reward_manager._step_reward[:, term_idx] = 0.0
             else:
                 value = term_cfg.func(self, **term_cfg.params) * term_cfg.weight * dt
+                value = self.reward_manager._mask_value_for_reward_group(group_name, value)
                 self.reward_manager._step_reward[:, term_idx] = value / dt
                 self.reward_manager._episode_sums[name] += value
 

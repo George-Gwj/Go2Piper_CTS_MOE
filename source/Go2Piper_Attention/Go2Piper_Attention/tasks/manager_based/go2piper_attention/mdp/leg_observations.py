@@ -104,6 +104,40 @@ def generated_commands(env: ManagerBasedRLEnv, command_name: str) -> torch.Tenso
     # print("get_command",env.command_manager.get_command(command_name))
     return env.command_manager.get_command(command_name)
 
+
+def gait_clock(
+    env: ManagerBasedRLEnv,
+    command_name: str = "base_velocity",
+    desired_step_freq: float = 1.4,
+    desired_duty_factor: float = 0.65,
+    desired_phase_offset: tuple[float, ...] = (0.0, 0.5, 0.5, 0.0),
+    command_threshold: float = 0.01,
+) -> torch.Tensor:
+    """Per-foot gait phase clock. Stopped envs return -1 for every foot."""
+    if desired_step_freq <= 0.0:
+        raise ValueError("desired_step_freq must be positive.")
+    if not 0.0 < desired_duty_factor < 1.0:
+        raise ValueError("desired_duty_factor must be in (0, 1).")
+    if len(desired_phase_offset) != 4:
+        raise ValueError(f"Expected 4 phase offsets, got {len(desired_phase_offset)}.")
+
+    if hasattr(env, "episode_length_buf"):
+        time_s = env.episode_length_buf.float() * env.step_dt
+    else:
+        time_s = torch.full(
+            (env.num_envs,),
+            float(getattr(env, "common_step_counter", 0)) * env.step_dt,
+            device=env.device,
+        )
+
+    phase_offsets = torch.tensor(desired_phase_offset, device=env.device, dtype=time_s.dtype).unsqueeze(0)
+    clock_data = torch.remainder(time_s.unsqueeze(1) * desired_step_freq + phase_offsets, 1.0)
+
+    commands = env.command_manager.get_command(command_name)
+    should_move = torch.norm(commands[:, :3], dim=1) > command_threshold
+    return torch.where(should_move.unsqueeze(1), clock_data, torch.full_like(clock_data, -1.0))
+
+
 def generated_armposcommands(env: ManagerBasedRLEnv, command_name: str) -> torch.Tensor:
     """The generated command from command term in the command manager with the given name."""
     # print("get_command",env.command_manager.get_command(command_name))
@@ -154,6 +188,78 @@ def get_joints_torques(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scene
                                 ],preserve_order=True)
     # print("leg torque ",asset.data.applied_torque[:, joint])
     return asset.data.applied_torque[:, joint]
+
+
+def _leg_joint_ids(asset: Articulation) -> list[int]:
+    joint_ids, _ = asset.find_joints([ "FR_hip_joint", "FR_thigh_joint", "FR_calf_joint",
+                                "FL_hip_joint", "FL_thigh_joint", "FL_calf_joint",
+                                "RR_hip_joint", "RR_thigh_joint", "RR_calf_joint",
+                                "RL_hip_joint", "RL_thigh_joint", "RL_calf_joint",
+
+                                ],preserve_order=True)
+    return joint_ids
+
+
+def _joint_gain_data(asset: Articulation, names: tuple[str, ...]) -> torch.Tensor:
+    for name in names:
+        gain = getattr(asset.data, name, None)
+        if gain is not None:
+            return gain
+    for name in names:
+        gain = getattr(asset, name, None)
+        if gain is not None:
+            return gain
+    raise AttributeError(f"Could not find any joint gain tensor from: {names}.")
+
+
+def _select_joint_gain(gain: torch.Tensor, joint_ids: list[int], num_envs: int) -> torch.Tensor:
+    if gain.ndim == 1:
+        return gain[joint_ids].unsqueeze(0).expand(num_envs, -1)
+    return gain[:, joint_ids]
+
+
+def joint_stiffness(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Current actuator stiffness for the 12 leg joints."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    gain = _joint_gain_data(asset, ("joint_stiffness", "default_joint_stiffness"))
+    return _select_joint_gain(gain, _leg_joint_ids(asset), env.num_envs)
+
+
+def joint_damping(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Current actuator damping for the 12 leg joints."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    gain = _joint_gain_data(asset, ("joint_damping", "default_joint_damping"))
+    return _select_joint_gain(gain, _leg_joint_ids(asset), env.num_envs)
+
+
+def base_height(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
+) -> torch.Tensor:
+    """Base height above the local terrain estimated by the height scanner."""
+    asset: Articulation = env.scene[asset_cfg.name]
+    sensor: RayCaster = env.scene.sensors[sensor_cfg.name]
+    terrain_heights_w = sensor.data.ray_hits_w[..., 2]
+    valid_hits = torch.isfinite(terrain_heights_w)
+    safe_heights = torch.where(valid_hits, terrain_heights_w, torch.zeros_like(terrain_heights_w))
+    valid_counts = valid_hits.sum(dim=1).clamp(min=1)
+    mean_height_ray = safe_heights.sum(dim=1) / valid_counts
+    height = asset.data.root_pos_w[:, 2] - mean_height_ray
+    return height.unsqueeze(-1)
+
+
+def height_scanner_map(
+    env: ManagerBasedRLEnv,
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
+    offset: float = 0.5,
+    clip: tuple[float, float] = (-1.0, 1.0),
+) -> torch.Tensor:
+    """Clipped local height scanner map from the base-mounted height scanner."""
+    sensor: RayCaster = env.scene.sensors[sensor_cfg.name]
+    height_data = sensor.data.pos_w[:, 2].unsqueeze(1) - sensor.data.ray_hits_w[..., 2] - offset
+    height_data = torch.nan_to_num(height_data, nan=0.0, posinf=clip[1], neginf=clip[0])
+    return height_data.clip(clip[0], clip[1])
 
 
 # ================================================================================================================================

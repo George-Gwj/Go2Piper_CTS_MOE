@@ -58,7 +58,7 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
     seed=42,
     curriculum=True,
     size=(8.0, 8.0),
-    num_rows=6,
+    num_rows=10,
     num_cols=5,
     horizontal_scale=0.05,
     vertical_scale=0.005,
@@ -70,13 +70,13 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
         ),
         "ascend": terrain_gen.HfPyramidStairsTerrainCfg(
             proportion=1.0,
-            step_height_range=(0.02, 0.22),
+            step_height_range=(0.03, 0.13),
             step_width=0.31,
             platform_width=2.0,
         ),
         "descend": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
             proportion=1.0,
-            step_height_range=(0.02, 0.22),
+            step_height_range=(0.03, 0.13),
             step_width=0.31,
             platform_width=2.0,
         ),
@@ -84,12 +84,12 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
             proportion=1.0,
             platform_width=2.0,
             ring_width_range=(0.6, 1.8),
-            ring_height_range=(0.5, 0.65),
+            ring_height_range=(0.45, 0.65),
             ring_thickness=0.15,
         ),
         "rough": terrain_gen.HfRandomUniformTerrainCfg(
             proportion=1.0,
-            noise_range=(0.00, 0.08),
+            noise_range=(0.00, 0.12),
             noise_step=0.005,
             downsampled_scale=0.20,
         ),
@@ -98,6 +98,42 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
 
 
 CTS_MOE_PLAY_LONG_TERRAINS_CFG = TerrainGeneratorCfg(
+    seed=42,
+    curriculum=True,
+    size=(8.0, 8.0),
+    num_rows=1,
+    num_cols=4,
+    horizontal_scale=0.05,
+    vertical_scale=0.005,
+    slope_threshold=0.75,
+    use_cache=False,
+    sub_terrains={
+        "flat": terrain_gen.MeshPlaneTerrainCfg(
+            proportion=1.0,
+        ),
+        "ascend": terrain_gen.HfPyramidStairsTerrainCfg(
+            proportion=1.0,
+            step_height_range=(0.12, 0.12),
+            step_width=0.31,
+            platform_width=2.0,
+        ),
+        "floating_ring": terrain_gen.MeshFloatingRingTerrainCfg(
+            proportion=1.0,
+            platform_width=2.0,
+            ring_width_range=(1.2, 1.2),
+            ring_height_range=(0.55, 0.55),
+            ring_thickness=0.15,
+        ),
+        "rough": terrain_gen.HfRandomUniformTerrainCfg(
+            proportion=1.0,
+            noise_range=(0.08, 0.08),
+            noise_step=0.005,
+            downsampled_scale=0.20,
+        ),
+    },
+)
+
+CTS_MOE_PLAY_LONG_TERRAINS_2_CFG = TerrainGeneratorCfg(
     seed=42,
     curriculum=True,
     size=(8.0, 8.0),
@@ -113,13 +149,13 @@ CTS_MOE_PLAY_LONG_TERRAINS_CFG = TerrainGeneratorCfg(
         ),
         "ascend": terrain_gen.HfPyramidStairsTerrainCfg(
             proportion=1.0,
-            step_height_range=(0.12, 0.12),
+            step_height_range=(0.10, 0.10),
             step_width=0.31,
             platform_width=2.0,
         ),
         "descend": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
             proportion=1.0,
-            step_height_range=(0.12, 0.12),
+            step_height_range=(0.10, 0.10),
             step_width=0.31,
             platform_width=2.0,
         ),
@@ -127,7 +163,7 @@ CTS_MOE_PLAY_LONG_TERRAINS_CFG = TerrainGeneratorCfg(
             proportion=1.0,
             platform_width=2.0,
             ring_width_range=(1.2, 1.2),
-            ring_height_range=(0.55, 0.55),
+            ring_height_range=(0.60, 0.60),
             ring_thickness=0.15,
         ),
         "rough": terrain_gen.HfRandomUniformTerrainCfg(
@@ -172,6 +208,15 @@ class MySceneCfg(InteractiveSceneCfg):
         offset=RayCasterCfg.OffsetCfg(pos=(0.1, 0.0, 3.0)),
         ray_alignment="yaw",
         pattern_cfg=patterns.GridPatternCfg(resolution=0.1, size=[0.4, 0.3]),
+        debug_vis=False,
+        mesh_prim_paths=["/World/ground"],
+    )
+
+    pose_height_scanner = MultiMeshRayCasterCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/base",
+        offset=MultiMeshRayCasterCfg.OffsetCfg(pos=(0.0, 0.0, 0.0)),
+        ray_alignment="yaw",
+        pattern_cfg=patterns.GridPatternCfg(resolution=0.2, size=[0.6, 0.6]),
         debug_vis=False,
         mesh_prim_paths=["/World/ground"],
     )
@@ -314,7 +359,7 @@ class EventCfg:
         func=mdp.reset_root_state_uniform,
         mode="reset",
         params={
-            "pose_range": {"x": (0.0, 0.0), "y": (0.0, 0.0), "yaw": (0.0, 0.0)},
+            "pose_range": {"x": (0.0, 0.0), "y": (0.0, 0.0), "yaw": (-1.57, 1.57)},
             "velocity_range": {
                 "x": (0.0, 0.0),
                 "y": (0.0, 0.0),
@@ -705,6 +750,16 @@ class RewardsCfg:
         weight=1.5,
         params={"command_name": "base_velocity", "std": 0.2},
     )
+    track_lin_vel_x_exp_descend = RewTerm(
+        func=mdp.track_lin_vel_x_exp,
+        weight=1.5,
+        params={"command_name": "base_velocity", "std": 0.2},
+    )
+    track_lin_vel_y_exp_descend = RewTerm(
+        func=mdp.track_lin_vel_y_exp,
+        weight=1.5,
+        params={"command_name": "base_velocity", "std": 0.2},
+    )
     track_lin_vel_x_exp_flat = RewTerm(
         func=mdp.track_lin_vel_x_exp,
         weight=1.5,
@@ -744,7 +799,7 @@ class RewardsCfg:
 
     track_base_height_exp_floating_ring = RewTerm(
         func=mdp.base_height_tracking_in_floating_ring_region,
-        weight=0.5,
+        weight=0.0,
         params={
             "desired_height": 0.22,
             "std": 0.02,
@@ -762,34 +817,16 @@ class RewardsCfg:
                  "desired_height": 0.3, 
                  "std": 0.02}
     )
-
-    forward_progress_ascend = RewTerm(
-        func=mdp.stair_up_forward_progress,
-        weight=0.0,
-        params={
-            "asset_cfg": SceneEntityCfg("robot"),
-            "first_step_object_name": "stair_step_0",
-            "step_depth": 0.35,
-            "num_steps": 7,
-            "approach_margin": 0.4,
-            "platform_margin": 0.7,
-        },
+    track_base_height_exp_descend = RewTerm(
+        func=mdp.base_height_tracking,
+        weight=0.5,
+         params={
+                 "desired_height": 0.3,
+                 "std": 0.02}
     )
 
-    base_height_progress_ascend = RewTerm(
-        func=mdp.stair_up_base_height_progress,
-        weight=0.0,
-        params={
-            "desired_base_clearance": 0.3,
-            "std": 0.06,
-            "asset_cfg": SceneEntityCfg("robot"),
-            "first_step_object_name": "stair_step_0",
-            "step_depth": 0.35,
-            "step_height": 0.05,
-            "num_steps": 7,
-            "approach_margin": 0.2,
-        },
-    )
+    forward_progress_ascend = None
+    base_height_progress_ascend = None
 
     track_base_height_exp_flat = RewTerm(
         func=mdp.base_height_tracking, 
@@ -803,6 +840,7 @@ class RewardsCfg:
     lin_vel_z_l2_rough = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.5)
     lin_vel_z_l2_floating_ring = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
     lin_vel_z_l2_ascend = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
+    lin_vel_z_l2_descend = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
     lin_vel_z_l2_flat = RewTerm(func=mdp.lin_vel_z_l2, weight=-1.0)
 
 
@@ -828,24 +866,24 @@ class RewardsCfg:
         },
     )
 
-    F_feet_air_time_common = RewTerm(
-        func=mdp.feet_air_time,
-        weight= 0.5,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="F.*_foot"),
-            "command_name": "base_velocity",
-            "threshold": 0.5,
-        },
-    )
-    R_feet_air_time_common = RewTerm(
-        func=mdp.feet_air_time,
-        weight= 2.0,
-        params={
-            "sensor_cfg": SceneEntityCfg("contact_forces", body_names="R.*_foot"),
-            "command_name": "base_velocity",
-            "threshold": 0.5,
-        },
-    )
+    # F_feet_air_time_common = RewTerm(
+    #     func=mdp.feet_air_time,
+    #     weight= 0.5,
+    #     params={
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names="F.*_foot"),
+    #         "command_name": "base_velocity",
+    #         "threshold": 0.5,
+    #     },
+    # )
+    # R_feet_air_time_common = RewTerm(
+    #     func=mdp.feet_air_time,
+    #     weight= 2.0,
+    #     params={
+    #         "sensor_cfg": SceneEntityCfg("contact_forces", body_names="R.*_foot"),
+    #         "command_name": "base_velocity",
+    #         "threshold": 0.5,
+    #     },
+    # )
 
     feet_height_flat = RewTerm(
         func=mdp.feet_height,
@@ -886,6 +924,16 @@ class RewardsCfg:
             "max_air_time": 0.5,
         },
     )
+    feet_long_contact_common = RewTerm(
+        func=mdp.feet_long_contact_penalty,
+        weight=-0.1,
+        params={
+            "sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_foot"),
+            "max_contact_time": 0.5,
+            "command_name": "base_velocity",
+            "command_threshold": 0.1,
+        },
+    )
     
 
     feet_height_body_ascend = RewTerm(
@@ -894,7 +942,17 @@ class RewardsCfg:
         params={
             "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
             "tanh_mult": 2.0,
-            "target_height": -0.15,
+            "target_height": -0.2,
+            "command_name": "base_velocity",
+        },
+    )
+    feet_height_body_descend = RewTerm(
+        func=mdp.feet_height_body,
+        weight=0.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=".*_foot"),
+            "tanh_mult": 2.0,
+            "target_height": -0.2,
             "command_name": "base_velocity",
         },
     )
@@ -927,7 +985,10 @@ class RewardsCfg:
         weight=-0.1,
         params={
             "asset_cfg": SceneEntityCfg("robot"),
-            "mirror_joints": [["FR.*", "RL.*"], ["FL.*", "RR.*"]],
+            "mirror_joints": [
+                ["FR_(thigh|calf)_joint", "RL_(thigh|calf)_joint"],
+                ["FL_(thigh|calf)_joint", "RR_(thigh|calf)_joint"],
+            ],
         },
     )
 
@@ -978,11 +1039,65 @@ class RewardsCfg:
         func=mdp.leg_action_smoothness_penalty,
         weight=-0.02,
     )
+
+    fr_feet_under_hips_common = RewTerm(
+        func=mdp.link_pair_planar_distance_exp,
+        weight=-1.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["FR_foot", "FR_hip"]),
+            "distance_sigma": 0.5,
+        },
+    )
+    fl_feet_under_hips_common = RewTerm(
+        func=mdp.link_pair_planar_distance_exp,
+        weight=-1.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["FL_foot", "FL_hip"]),
+            "distance_sigma": 0.5,
+        },
+    )
+    rr_feet_under_hips_common = RewTerm(
+        func=mdp.link_pair_planar_distance_exp,
+        weight=-1.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["RR_foot", "RR_hip"]),
+            "distance_sigma": 0.5,
+        },
+    )
+    rl_feet_under_hips_common = RewTerm(
+        func=mdp.link_pair_planar_distance_exp,
+        weight=-1.0,
+        params={
+            "asset_cfg": SceneEntityCfg("robot", body_names=["RL_foot", "RL_hip"]),
+            "distance_sigma": 0.5,
+        },
+    )
     
-    flat_orientation_l2_rough = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
-    flat_orientation_l2_floating_ring = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
-    flat_orientation_l2_ascend = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
-    flat_orientation_l2_flat = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    flat_orientation_l2_rough = RewTerm(
+        func=mdp.track_orientation_l2,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("pose_height_scanner")},
+    )
+    flat_orientation_l2_floating_ring = RewTerm(
+        func=mdp.track_orientation_l2,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("pose_height_scanner")},
+    )
+    flat_orientation_l2_ascend = RewTerm(
+        func=mdp.track_orientation_l2,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("pose_height_scanner")},
+    )
+    flat_orientation_l2_descend = RewTerm(
+        func=mdp.track_orientation_l2,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("pose_height_scanner")},
+    )
+    flat_orientation_l2_flat = RewTerm(
+        func=mdp.track_orientation_l2,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("pose_height_scanner")},
+    )
 
     # height_reward = RewTerm(func=mdp.base_height_l2, weight=-2.0, params={"target_height": 0.31, "std":0.03})
 
@@ -1019,6 +1134,11 @@ class RewardsCfg:
         weight=-2.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh"), "threshold": 0.5},
     )
+    thigh_contact_descend = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-2.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_thigh"), "threshold": 0.5},
+    )
     thigh_contact_flat = RewTerm(
         func=mdp.undesired_contacts,
         weight=-2.0,
@@ -1038,6 +1158,11 @@ class RewardsCfg:
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"), "threshold": 0.5},
     )
     calf_contact_ascend = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-2.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"), "threshold": 0.5},
+    )
+    calf_contact_descend = RewTerm(
         func=mdp.undesired_contacts,
         weight=-2.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=".*_calf"), "threshold": 0.5},
@@ -1065,6 +1190,11 @@ class RewardsCfg:
         weight=-1.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 0.5},
     )
+    base_contact_descend = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names="base"), "threshold": 0.5},
+    )
     base_contact_flat = RewTerm(
         func=mdp.undesired_contacts,
         weight=-1.0,
@@ -1087,24 +1217,16 @@ class RewardsCfg:
         weight=-1.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["link[3-6]", "end_effector"]), "threshold": 0.5},
     )
+    arm_contact_descend = RewTerm(
+        func=mdp.undesired_contacts,
+        weight=-1.0,
+        params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["link[3-6]", "end_effector"]), "threshold": 0.5},
+    )
     arm_contact_flat = RewTerm(
         func=mdp.undesired_contacts,
         weight=-1.0,
         params={"sensor_cfg": SceneEntityCfg("contact_forces", body_names=["link[3-6]", "end_effector"]), "threshold": 0.5},
     )
-
-    track_lin_vel_x_exp_descend = track_lin_vel_x_exp_ascend
-    track_lin_vel_y_exp_descend = track_lin_vel_y_exp_ascend
-    track_base_height_exp_descend = track_base_height_exp_ascend
-    forward_progress_descend = forward_progress_ascend
-    base_height_progress_descend = base_height_progress_ascend
-    lin_vel_z_l2_descend = lin_vel_z_l2_ascend
-    feet_height_body_descend = feet_height_body_ascend
-    flat_orientation_l2_descend = flat_orientation_l2_ascend
-    thigh_contact_descend = thigh_contact_ascend
-    calf_contact_descend = calf_contact_ascend
-    base_contact_descend = base_contact_ascend
-    arm_contact_descend = arm_contact_ascend
 
 @configclass
 class MultiTaskRewardCfg:
@@ -1192,7 +1314,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
     """Configuration for the locomotion velocity-tracking environment."""
 
     # Scene settings
-    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=8.0)
+    scene: MySceneCfg = MySceneCfg(num_envs=4096, env_spacing=10.0)
     # Basic settings
     observations: ObservationsCfg = ObservationsCfg()
     actions: ActionsCfg = ActionsCfg()
@@ -1208,7 +1330,7 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         """Post initialization."""
         # general settings
         self.decimation = 4
-        self.episode_length_s = 10.0
+        self.episode_length_s = 8.0
         # simulation settings
         self.sim.dt = 0.005
         self.sim.render_interval = self.decimation
@@ -1219,6 +1341,8 @@ class LocomotionVelocityEnvCfg(ManagerBasedRLEnvCfg):
         # we tick all the sensors based on the smallest update period (physics update period)
         if self.scene.height_scanner is not None:
             self.scene.height_scanner.update_period = self.decimation * self.sim.dt
+        if self.scene.pose_height_scanner is not None:
+            self.scene.pose_height_scanner.update_period = self.decimation * self.sim.dt
         if self.scene.H_ground_scan is not None:
             self.scene.H_ground_scan.update_period = self.decimation * self.sim.dt
         if self.scene.H_lateral_scan is not None:

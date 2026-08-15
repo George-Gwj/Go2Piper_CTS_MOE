@@ -710,6 +710,26 @@ def feet_height_body(
     reward *= torch.clamp(-env.scene["robot"].data.projected_gravity_b[:, 2], 0, 0.7) / 0.7
     return reward
 
+
+def link_pair_planar_distance_exp(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg,
+    distance_sigma: float,
+    target_distance: float = 0.0,
+) -> torch.Tensor:
+    """Penalize the xy-plane distance between two links with an exponential kernel."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    if len(asset_cfg.body_ids) != 2:
+        raise ValueError(
+            f"link_pair_planar_distance_exp expects exactly two bodies, got {len(asset_cfg.body_ids)}."
+        )
+
+    link_1_xy = asset.data.body_pos_w[:, asset_cfg.body_ids[0], :2]
+    link_2_xy = asset.data.body_pos_w[:, asset_cfg.body_ids[1], :2]
+    distance_error = torch.abs(torch.norm(link_1_xy - link_2_xy, dim=1) - target_distance)
+    return 1.0 - torch.exp(-distance_error / distance_sigma)
+
+
 def standing_feet_contact_force(env: ManagerBasedRLEnv, sensor_cfg: SceneEntityCfg, command_name: str,
                                 force_threshold: float, command_threshold: float) -> torch.Tensor:
     # Extract the relevant sensor and command
@@ -796,6 +816,46 @@ def flat_orientation_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = Scen
     # extract the used quantities (to enable type-hinting)
     asset: RigidObject = env.scene[asset_cfg.name]
     return torch.sum(torch.square(asset.data.projected_gravity_b[:, :2]), dim=1)
+
+
+def track_orientation_l2(
+    env: ManagerBasedRLEnv,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+    sensor_cfg: SceneEntityCfg = SceneEntityCfg("pose_height_scanner"),
+) -> torch.Tensor:
+    """Penalize base roll/pitch error against the locally scanned terrain pitch."""
+    asset: RigidObject = env.scene[asset_cfg.name]
+    sensor = env.scene.sensors[sensor_cfg.name]
+
+    height_data_scanner = sensor.data.ray_hits_w[..., 2]
+    height_data_scanner = torch.nan_to_num(height_data_scanner, nan=0.0, posinf=1.0, neginf=-1.0)
+    height_data_scanner = torch.clip(height_data_scanner, min=-5.0, max=5.0)
+
+    height_map_resolution = sensor.cfg.pattern_cfg.resolution
+    height_map_x_points = int(round(sensor.cfg.pattern_cfg.size[0] / height_map_resolution)) + 1
+    distance_between_front_and_back = (height_map_x_points / 2) * height_map_resolution
+    half_x_points = int(height_map_x_points / 2)
+
+    row_starts = torch.arange(0, height_data_scanner.shape[1], height_map_x_points, device=height_data_scanner.device)
+    cols_back = (row_starts.unsqueeze(1) + torch.arange(half_x_points, device=height_data_scanner.device)).flatten()
+    cols_front = (
+        row_starts.unsqueeze(1)
+        + torch.arange(half_x_points, 2 * half_x_points, device=height_data_scanner.device)
+    ).flatten()
+
+    mean_height_ray_front = torch.mean(height_data_scanner[:, cols_front], dim=1)
+    mean_height_ray_back = torch.mean(height_data_scanner[:, cols_back], dim=1)
+    delta_z = mean_height_ray_front - mean_height_ray_back
+    delta_s = height_data_scanner.new_tensor(distance_between_front_and_back)
+    terrain_pitch = -torch.atan2(delta_z, delta_s)
+    terrain_roll = torch.zeros_like(terrain_pitch)
+
+    root_roll_w, root_pitch_w, _ = math_utils.euler_xyz_from_quat(asset.data.root_quat_w)
+    root_roll_w = torch.atan2(torch.sin(root_roll_w), torch.cos(root_roll_w))
+    root_pitch_w = torch.atan2(torch.sin(root_pitch_w), torch.cos(root_pitch_w))
+
+    return torch.square(terrain_pitch - root_pitch_w) + torch.square(terrain_roll - root_roll_w)
+
 
 def hip_action_l2(env: ManagerBasedRLEnv) -> torch.Tensor:
     """Penalize the actions using L2 squared kernel."""
@@ -1292,31 +1352,6 @@ def joint_torques_l2(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEn
     # extract the used quantities (to enable type-hinting)
     asset: Articulation = env.scene[asset_cfg.name]
     return torch.sum(torch.square(asset.data.applied_torque[:, asset_cfg.joint_ids]), dim=1)
-
-
-def joint_torques_max(
-    env: ManagerBasedRLEnv,
-    joint_names: list[str],
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
-) -> torch.Tensor:
-    """Penalize the maximum absolute torque within a joint group."""
-    asset: Articulation = env.scene[asset_cfg.name]
-    joint_indices, _ = asset.find_joints(joint_names)
-    torques = asset.data.applied_torque[:, joint_indices]
-    max_abs_torque = torch.max(torch.abs(torques), dim=1).values
-    return torch.square(max_abs_torque)
-
-
-def joint_power(env: ManagerBasedRLEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Penalize mechanical joint power."""
-    asset: Articulation = env.scene[asset_cfg.name]
-    return torch.sum(
-        torch.abs(
-            asset.data.joint_vel[:, asset_cfg.joint_ids]
-            * asset.data.applied_torque[:, asset_cfg.joint_ids]
-        ),
-        dim=1,
-    )
 
 
 
