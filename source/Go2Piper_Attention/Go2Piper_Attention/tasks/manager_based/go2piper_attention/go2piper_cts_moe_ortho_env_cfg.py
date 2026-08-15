@@ -50,6 +50,47 @@ def cts_moe_task_context(env) -> torch.Tensor:
     return env.task_id.float().unsqueeze(-1)
 
 
+def base_height_command(
+    env,
+    height_range: tuple[float, float] = (0.22, 0.30),
+    fixed_height: float = 0.30,
+) -> torch.Tensor:
+    """Cached per-env commanded base height as [B, 1], resampled on reset."""
+    if not hasattr(env, "_base_height_command"):
+        env._base_height_command = torch.empty((env.num_envs, 1), device=env.device)
+        env._base_height_command_reset_seen = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+        _sample_base_height_command(env, torch.arange(env.num_envs, device=env.device), height_range, fixed_height)
+
+    episode_length = getattr(env, "episode_length_buf", None)
+    if episode_length is not None:
+        reset_ids = (episode_length == 0) & ~env._base_height_command_reset_seen
+        if reset_ids.any():
+            _sample_base_height_command(env, reset_ids, height_range, fixed_height)
+            env._base_height_command_reset_seen[reset_ids] = True
+        env._base_height_command_reset_seen[episode_length > 0] = False
+
+    return env._base_height_command
+
+
+def _sample_base_height_command(
+    env,
+    env_ids: torch.Tensor,
+    height_range: tuple[float, float],
+    fixed_height: float,
+) -> None:
+    task_id = cts_moe_task_context(env).long().view(-1)
+    if env_ids.dtype == torch.bool:
+        env_ids = env_ids.nonzero(as_tuple=False).view(-1)
+    else:
+        env_ids = env_ids.long().view(-1)
+    random_height_task = (task_id == 0) | (task_id == 3) | (task_id == 4)
+    selected_random_task = random_height_task[env_ids]
+    env._base_height_command[env_ids] = fixed_height
+    if selected_random_task.any():
+        random_env_ids = env_ids[selected_random_task]
+        env._base_height_command[random_env_ids].uniform_(*height_range)
+
+
 ##
 # Scene definition
 ##
@@ -81,7 +122,7 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
             platform_width=2.0,
         ),
         "floating_ring": terrain_gen.MeshFloatingRingTerrainCfg(
-            proportion=1.0,
+            proportion=0.0,
             platform_width=2.0,
             ring_width_range=(0.6, 1.8),
             ring_height_range=(0.45, 0.65),
@@ -492,7 +533,7 @@ class ActionsCfg:
                                           joint_names=[
                                               "joint1", "joint2", "joint3", 
                                               "joint4", "joint5", "joint6"],
-                                            scale=0.5,
+                                            scale=0.25,
                                             use_default_offset=True,
                                             preserve_order=True,)
 
@@ -515,6 +556,7 @@ class ObservationsCfg:
             func=leg_obs.generated_commands,
             params={"command_name": "base_velocity"},
         )  # dim = 3
+        height_command = ObsTerm(func=base_height_command)  # dim = 1
         ee_pose_commands = ObsTerm(
             func=arm_obs.generated_commands,
             params={"command_name": "ee_pose"},
@@ -545,6 +587,7 @@ class ObservationsCfg:
             history_length=5,
             params={"command_name": "base_velocity"},
         )  # dim = 3
+        height_command = ObsTerm(func=base_height_command, history_length=5)  # dim = 1
         ee_pose_commands = ObsTerm(
             func=arm_obs.generated_commands,
             history_length=5,
@@ -577,6 +620,7 @@ class ObservationsCfg:
             func=leg_obs.generated_commands,
             params={"command_name": "base_velocity"},
         )  # dim = 3
+        height_command = ObsTerm(func=base_height_command)  # dim = 1
         ee_pose_commands = ObsTerm(
             func=arm_obs.generated_commands,
             params={"command_name": "ee_pose"},
@@ -649,7 +693,35 @@ class RewardsCfg:
 
     # -- ARM 
     # The name must have a prefix of "end_effector_".
-    end_effector_position_tracking_exp_common = RewTerm(
+    end_effector_position_tracking_exp_rough = RewTerm(
+        func=mdp.position_command_error_exp,
+        weight=2.5,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose",
+                "std": 0.4},
+    )
+    end_effector_position_tracking_exp_floating_ring = RewTerm(
+        func=mdp.position_command_error_exp,
+        weight=2.5,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose",
+                "std": 0.4},
+    )
+    end_effector_position_tracking_exp_ascend = RewTerm(
+        func=mdp.position_command_error_exp,
+        weight=2.5,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose",
+                "std": 0.4},
+    )
+    end_effector_position_tracking_exp_descend = RewTerm(
+        func=mdp.position_command_error_exp,
+        weight=2.5,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose",
+                "std": 0.4},
+    )
+    end_effector_position_tracking_exp_flat = RewTerm(
         func=mdp.position_command_error_exp,
         weight=2.5,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
@@ -657,17 +729,41 @@ class RewardsCfg:
                 "std": 0.4},
     )
 
-    end_effector_position_tracking_fine_grained_common = RewTerm(
-        func=mdp.position_command_error_tanh,
-        weight=2.0,
-        params={
-            "asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
-            "std": 0.4,  
-            "command_name": "ee_pose",
-        },
-    )
+    # end_effector_position_tracking_fine_grained_common = RewTerm(
+    #     func=mdp.position_command_error_tanh,
+    #     weight=0.0,
+    #     params={
+    #         "asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+    #         "std": 0.4,  
+    #         "command_name": "ee_pose",
+    #     },
+    # )
 
-    end_effector_orientation_tracking_common = RewTerm(
+    end_effector_orientation_tracking_rough = RewTerm(
+        func=mdp.orientation_command_error,
+        weight=0.0,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose"},
+    )
+    end_effector_orientation_tracking_floating_ring = RewTerm(
+        func=mdp.orientation_command_error,
+        weight=0.0,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose"},
+    )
+    end_effector_orientation_tracking_ascend = RewTerm(
+        func=mdp.orientation_command_error,
+        weight=0.0,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose"},
+    )
+    end_effector_orientation_tracking_descend = RewTerm(
+        func=mdp.orientation_command_error,
+        weight=0.0,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
+                "command_name": "ee_pose"},
+    )
+    end_effector_orientation_tracking_flat = RewTerm(
         func=mdp.orientation_command_error,
         weight=0.0,
         params={"asset_cfg": SceneEntityCfg("robot", body_names="end_effector"),
@@ -794,7 +890,8 @@ class RewardsCfg:
         weight=0.5,
          params={ 
                  "desired_height": 0.3, 
-                 "std": 0.02}
+                 "std": 0.02,
+                 "use_height_command": True}
     )
 
     track_base_height_exp_floating_ring = RewTerm(
@@ -803,6 +900,7 @@ class RewardsCfg:
         params={
             "desired_height": 0.22,
             "std": 0.02,
+            "use_height_command": True,
             "floating_ring_terrain_type": 3,
             "platform_width": 2.0,
             "ring_width_range": (0.6, 1.8),
@@ -815,14 +913,16 @@ class RewardsCfg:
         weight=0.5,
          params={ 
                  "desired_height": 0.3, 
-                 "std": 0.02}
+                 "std": 0.02,
+                 "use_height_command": True}
     )
     track_base_height_exp_descend = RewTerm(
         func=mdp.base_height_tracking,
         weight=0.5,
          params={
                  "desired_height": 0.3,
-                 "std": 0.02}
+                 "std": 0.02,
+                 "use_height_command": True}
     )
 
     forward_progress_ascend = None
@@ -833,7 +933,8 @@ class RewardsCfg:
         weight=0.5,
          params={ 
                  "desired_height": 0.3, 
-                 "std": 0.02}
+                 "std": 0.02,
+                 "use_height_command": True}
     )
 
 

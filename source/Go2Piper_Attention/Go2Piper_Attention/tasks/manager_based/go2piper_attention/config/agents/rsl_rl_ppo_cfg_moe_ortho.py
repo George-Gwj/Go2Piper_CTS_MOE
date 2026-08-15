@@ -11,8 +11,8 @@ class Go2PiperCTSMoEPolicyCfg:
     class_name: str = "StructureAwareCTSMoEPolicy"
 
     # Full-body action/proprio dimensions. proprio_dim is expected to include commands.
-    proprio_dim: int = 71
-    privileged_dim: int = 103
+    proprio_dim: int = 72
+    privileged_dim: int = 104
     action_dim: int = 18
 
     # Shared latent/task dimensions.
@@ -30,7 +30,7 @@ class Go2PiperCTSMoEPolicyCfg:
     teacher_height_hidden_dims: list[int] = [512, 256]
     teacher_height_feature_dim: int = 128
 
-    # Student encoder: MLP(o^p_{t-H:t}), depth CNN, GRU, then Linear + LayerNorm.
+    # Student encoder: MLP(o^p_{t-H:t}), optional perception encoder, GRU, then Linear + LayerNorm.
     student_perception_type: str = "depth"
     student_perception_dim: int | None = None
     student_perception_channels: int = 1
@@ -132,18 +132,18 @@ class Go2PiperCTSMoEAlgorithmCfg(RslRlPpoAlgorithmCfg):
 
 @configclass
 class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
-    """Runner config for a single CTS-MoE full-body policy."""
+    """Runner config for proprio-history policy with depth task-label supervision."""
 
     num_steps_per_env = 24
     max_iterations = 30000
     save_interval = 500
-    experiment_name = "go2piper_cts_moe_ortho"
+    experiment_name = "go2piper_cts_moe_ortho_proprio_history_depth_task"
     empirical_normalization = False
     load_checkpoint: str = "CTSMoEOrtho_.*.pt"
 
     policy = Go2PiperCTSMoEPolicyCfg(
-        proprio_dim=71,
-        privileged_dim=103,
+        proprio_dim=72,
+        privileged_dim=104,
         action_dim=18,
         latent_dim=32,
         num_tasks=5,
@@ -152,7 +152,7 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         teacher_privileged_feature_dim=32,
         teacher_height_hidden_dims=[512, 256],
         teacher_height_feature_dim=128,
-        student_perception_type="depth",
+        student_perception_type="proprio_only",
         student_perception_channels=1,
         student_proprio_hidden_dims=[512, 256],
         student_proprio_feature_dim=32,
@@ -160,17 +160,19 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         student_depth_feature_dim=128,
         student_gru_hidden_dim=256,
         student_gru_num_layers=1,
+        depth_task_predictor_hidden_dims=[512, 256],
+        enable_depth_task_prediction=True,
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
         gate_activation="tanh",
-        num_experts=6,
+        num_experts=5,
         expert_names=[
             "expert_0",
             "expert_1",
             "expert_2",
             "expert_3",
             "expert_4",
-            "expert_5",
+            # "expert_5",
         ],
         expert_feature_dim=128,
         expert_hidden_dims=[256, 128],
@@ -189,7 +191,7 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
     algorithm = Go2PiperCTSMoEAlgorithmCfg(
-        training_mode="mixed",
+        training_mode="student_policy",
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
@@ -204,11 +206,13 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         max_grad_norm=1.0,
         eps=1e-5,
         student_learning_rate=1e-4,
-        distillation_loss_coef=1.0,
-        student_rollout_ratio=0.2,
+        distillation_loss_coef=0.0,
+        student_rollout_ratio=0.0,
+        depth_task_loss_coef=1.0,
+        depth_task_learning_rate=1e-4,
         router_entropy_coef=0.0,
         router_balance_coef=0.0,
-        router_logit_l2_coef=0.0,
+        router_logit_l2_coef=1e-4,
         lambda_orth=1e-3,
         orth_loss_on="raw",
         per_task_advantage_normalization=True,
@@ -245,8 +249,8 @@ class Go2PiperCTSMoETeacherRunnerCfg(RslRlOnPolicyRunnerCfg):
     load_checkpoint: str = "CTSMoEOrthoTeacher_.*.pt"
 
     policy = Go2PiperCTSMoETeacherPolicyCfg(
-        proprio_dim=71,
-        privileged_dim=103,
+        proprio_dim=72,
+        privileged_dim=104,
         action_dim=18,
         latent_dim=32,
         num_tasks=5,
@@ -338,8 +342,8 @@ class Go2PiperCTSMoETeacher2ExpertsRunnerCfg(RslRlOnPolicyRunnerCfg):
     load_checkpoint: str = "CTSMoE_.*.pt"
 
     policy = Go2PiperCTSMoETeacherPolicyCfg(
-        proprio_dim=71,
-        privileged_dim=103,
+        proprio_dim=72,
+        privileged_dim=104,
         action_dim=18,
         latent_dim=32,
         num_tasks=5,
@@ -424,8 +428,8 @@ class Go2PiperCTSMoETeacher3ExpertsRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
     load_checkpoint: str = "CTSMoE_.*.pt"
 
     policy = Go2PiperCTSMoETeacherPolicyCfg(
-        proprio_dim=71,
-        privileged_dim=103,
+        proprio_dim=72,
+        privileged_dim=104,
         action_dim=18,
         latent_dim=32,
         num_tasks=5,

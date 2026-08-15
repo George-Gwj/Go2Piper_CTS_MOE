@@ -49,6 +49,47 @@ def cts_moe_task_context(env) -> torch.Tensor:
     return env.task_id.float().unsqueeze(-1)
 
 
+def base_height_command(
+    env,
+    height_range: tuple[float, float] = (0.22, 0.30),
+    fixed_height: float = 0.30,
+) -> torch.Tensor:
+    """Cached per-env commanded base height as [B, 1], resampled on reset."""
+    if not hasattr(env, "_base_height_command"):
+        env._base_height_command = torch.empty((env.num_envs, 1), device=env.device)
+        env._base_height_command_reset_seen = torch.zeros(env.num_envs, dtype=torch.bool, device=env.device)
+        _sample_base_height_command(env, torch.arange(env.num_envs, device=env.device), height_range, fixed_height)
+
+    episode_length = getattr(env, "episode_length_buf", None)
+    if episode_length is not None:
+        reset_ids = (episode_length == 0) & ~env._base_height_command_reset_seen
+        if reset_ids.any():
+            _sample_base_height_command(env, reset_ids, height_range, fixed_height)
+            env._base_height_command_reset_seen[reset_ids] = True
+        env._base_height_command_reset_seen[episode_length > 0] = False
+
+    return env._base_height_command
+
+
+def _sample_base_height_command(
+    env,
+    env_ids: torch.Tensor,
+    height_range: tuple[float, float],
+    fixed_height: float,
+) -> None:
+    task_id = cts_moe_task_context(env).long().view(-1)
+    if env_ids.dtype == torch.bool:
+        env_ids = env_ids.nonzero(as_tuple=False).view(-1)
+    else:
+        env_ids = env_ids.long().view(-1)
+    random_height_task = (task_id == 0) | (task_id == 3) | (task_id == 4)
+    selected_random_task = random_height_task[env_ids]
+    env._base_height_command[env_ids] = fixed_height
+    if selected_random_task.any():
+        random_env_ids = env_ids[selected_random_task]
+        env._base_height_command[random_env_ids].uniform_(*height_range)
+
+
 ##
 # Scene definition
 ##
@@ -479,6 +520,7 @@ class ObservationsCfg:
             func=leg_obs.generated_commands,
             params={"command_name": "base_velocity"},
         )  # dim = 3
+        height_command = ObsTerm(func=base_height_command)  # dim = 1
         projected_gravity = ObsTerm(
             func=leg_obs.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
@@ -502,6 +544,7 @@ class ObservationsCfg:
             history_length=5,
             params={"command_name": "base_velocity"},
         )  # dim = 3
+        height_command = ObsTerm(func=base_height_command, history_length=5)  # dim = 1
         projected_gravity = ObsTerm(
             func=leg_obs.projected_gravity,
             history_length=5,
@@ -526,6 +569,7 @@ class ObservationsCfg:
             func=leg_obs.generated_commands,
             params={"command_name": "base_velocity"},
         )  # dim = 3
+        height_command = ObsTerm(func=base_height_command)  # dim = 1
         projected_gravity = ObsTerm(func=leg_obs.projected_gravity)  # dim = 3
         leg_joint_torques = ObsTerm(func=leg_obs.get_joints_torques)  # dim = 12
         feet_contact = ObsTerm(
@@ -654,7 +698,8 @@ class RewardsCfg:
         weight=0.5,
          params={ 
                  "desired_height": 0.3, 
-                 "std": 0.02}
+                 "std": 0.02,
+                 "use_height_command": True}
     )
 
     # track_base_height_exp_floating_ring = RewTerm(
@@ -672,6 +717,7 @@ class RewardsCfg:
         params={
             "desired_height": 0.22,
             "std": 0.02,
+            "use_height_command": True,
             "floating_ring_terrain_type": 3,
             "platform_width": 2.0,
             "ring_width_range": (0.6, 1.8),
@@ -684,14 +730,16 @@ class RewardsCfg:
         weight=0.5,
          params={ 
                  "desired_height": 0.3, 
-                 "std": 0.02}
+                 "std": 0.02,
+                 "use_height_command": True}
     )
     track_base_height_exp_descend = RewTerm(
         func=mdp.base_height_tracking,
         weight=0.5,
          params={
                  "desired_height": 0.3,
-                 "std": 0.02}
+                 "std": 0.02,
+                 "use_height_command": True}
     )
 
     forward_progress_ascend = None
@@ -702,7 +750,8 @@ class RewardsCfg:
         weight=0.5,
          params={ 
                  "desired_height": 0.3, 
-                 "std": 0.02}
+                 "std": 0.02,
+                 "use_height_command": True}
     )
 
 

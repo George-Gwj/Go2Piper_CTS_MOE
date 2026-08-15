@@ -358,6 +358,8 @@ def base_height_tracking(
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
     terrain_height_mode: str = "mean",
+    use_height_command: bool = False,
+    height_command_attr: str = "_base_height_command",
 ):
     asset: RigidObject = env.scene[asset_cfg.name]
 
@@ -378,7 +380,16 @@ def base_height_tracking(
         raise ValueError(f"Unsupported terrain_height_mode: {terrain_height_mode}")
 
     height_above_terrain = base_height_w - local_terrain_height_w
-    height_error = torch.abs(desired_height - height_above_terrain)
+    if use_height_command:
+        if not hasattr(env, height_command_attr):
+            raise AttributeError(
+                f"Height command reward expected env.{height_command_attr}; "
+                "add the base_height_command observation before using use_height_command=True."
+            )
+        target_height = getattr(env, height_command_attr).view(-1)
+    else:
+        target_height = torch.full_like(height_above_terrain, float(desired_height))
+    height_error = torch.abs(target_height - height_above_terrain)
 
     return torch.exp(-height_error / std)
 
@@ -422,6 +433,8 @@ def base_height_tracking_in_floating_ring_region(
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("height_scanner"),
     terrain_height_mode: str = "max",
+    use_height_command: bool = False,
+    height_command_attr: str = "_base_height_command",
     floating_ring_terrain_type: int = 3,
     platform_width: float = 2.0,
     ring_width_range: tuple[float, float] = (0.6, 1.8),
@@ -436,6 +449,8 @@ def base_height_tracking_in_floating_ring_region(
         asset_cfg=asset_cfg,
         sensor_cfg=sensor_cfg,
         terrain_height_mode=terrain_height_mode,
+        use_height_command=use_height_command,
+        height_command_attr=height_command_attr,
     )
     gate = robot_in_floating_ring_region(
         env,

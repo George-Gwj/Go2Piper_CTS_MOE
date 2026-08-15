@@ -28,8 +28,8 @@ class Go2PiperLegCTSMoERunnerCfg(Go2PiperCTSMoERunnerCfg):
     load_checkpoint: str = "LegCTSMoEOrtho_.*.pt"
 
     policy = Go2PiperLegCTSMoEPolicyCfg(
-        proprio_dim=46,
-        privileged_dim=65,
+        proprio_dim=47,
+        privileged_dim=66,
         action_dim=12,
         latent_dim=32,
         num_tasks=5,
@@ -89,8 +89,8 @@ class Go2PiperLegCTSMoETaskRouterSharedHeadRunnerCfg(Go2PiperCTSMoETeacherRunner
     load_checkpoint: str = "LegCTSMoEOrthoTeacherTaskRouterSharedHead_.*.pt"
 
     policy = Go2PiperLegCTSMoETeacherPolicyCfg(
-        proprio_dim=46,
-        privileged_dim=65,
+        proprio_dim=47,
+        privileged_dim=66,
         action_dim=12,
         latent_dim=32,
         num_tasks=5,
@@ -149,8 +149,8 @@ class Go2PiperLegCTSMoELatentRouterTaskHeadsRunnerCfg(Go2PiperCTSMoETeacherRunne
     load_checkpoint: str = "LegCTSMoEOrthoTeacherLatentRouterTaskHeads_.*.pt"
 
     policy = Go2PiperLegCTSMoETeacherPolicyCfg(
-        proprio_dim=46,
-        privileged_dim=65,
+        proprio_dim=47,
+        privileged_dim=66,
         action_dim=12,
         latent_dim=32,
         num_tasks=5,
@@ -209,8 +209,8 @@ class Go2PiperLegCTSMoETeacherRunnerCfg(Go2PiperCTSMoETeacherRunnerCfg):
     load_checkpoint: str = "LegCTSMoEOrthoTeacher_.*.pt"
 
     policy = Go2PiperLegCTSMoETeacherPolicyCfg(
-        proprio_dim=46,
-        privileged_dim=65,
+        proprio_dim=47,
+        privileged_dim=66,
         action_dim=12,
         latent_dim=32,
         num_tasks=5,
