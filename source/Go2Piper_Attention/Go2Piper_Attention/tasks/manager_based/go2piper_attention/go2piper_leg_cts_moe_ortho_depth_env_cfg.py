@@ -99,7 +99,7 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
     curriculum=True,
     size=(8.0, 8.0),
     num_rows=10,
-    num_cols=5,
+    num_cols=4,
     horizontal_scale=0.05,
     vertical_scale=0.005,
     slope_threshold=0.75,
@@ -620,7 +620,7 @@ class ObservationsCfg:
     privileged_obs: PrivilegedObsCfg = PrivilegedObsCfg()
 
     depth: Depth_ObsCfg = Depth_ObsCfg()
-    height_scan = None
+    height_scan: HeightScan_ObsCfg = HeightScan_ObsCfg()
 
 
 @configclass

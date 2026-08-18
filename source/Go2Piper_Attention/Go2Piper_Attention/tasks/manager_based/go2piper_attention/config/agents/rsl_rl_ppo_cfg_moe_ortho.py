@@ -40,8 +40,6 @@ class Go2PiperCTSMoEPolicyCfg:
     student_depth_feature_dim: int = 128
     student_gru_hidden_dim: int = 256
     student_gru_num_layers: int = 1
-    depth_task_predictor_hidden_dims: list[int] = [512, 256]
-    enable_depth_task_prediction: bool = False
 
     # Actor selection. "cts_moe" keeps the original action-level MoE.
     actor_type: str = "orthogonal_cts_moe"
@@ -67,6 +65,7 @@ class Go2PiperCTSMoEPolicyCfg:
     critic_shared_trunk: bool = False
     critic_trunk_hidden_dims: list[int] | None = None
     critic_head_hidden_dims: list[int] = [64]
+    critic_latent_source: str = "actor"
 
     # Gaussian policy std.
     init_log_std: float = 0.0
@@ -106,8 +105,6 @@ class Go2PiperCTSMoEAlgorithmCfg(RslRlPpoAlgorithmCfg):
     # Student distillation.
     distillation_loss_coef: float = 1.0
     student_rollout_ratio: float = 0.15
-    depth_task_loss_coef: float = 0.0
-    depth_task_learning_rate: float | None = None
 
     # Router auxiliary losses.
     router_entropy_coef: float = 0.0
@@ -160,8 +157,6 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         student_depth_feature_dim=128,
         student_gru_hidden_dim=256,
         student_gru_num_layers=1,
-        depth_task_predictor_hidden_dims=[512, 256],
-        enable_depth_task_prediction=True,
         actor_type="orthogonal_cts_moe",
         orthogonal_mode="gram_schmidt",
         gate_activation="tanh",
@@ -185,6 +180,7 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         critic_hidden_dims=[256, 128],
         critic_shared_trunk=False,
         critic_head_hidden_dims=[64],
+        critic_latent_source="teacher",
         init_log_std=0.0,
         learnable_log_std=True,
         activation="elu",
@@ -208,8 +204,6 @@ class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):
         student_learning_rate=1e-4,
         distillation_loss_coef=0.0,
         student_rollout_ratio=0.0,
-        depth_task_loss_coef=1.0,
-        depth_task_learning_rate=1e-4,
         router_entropy_coef=0.0,
         router_balance_coef=0.0,
         router_logit_l2_coef=1e-4,

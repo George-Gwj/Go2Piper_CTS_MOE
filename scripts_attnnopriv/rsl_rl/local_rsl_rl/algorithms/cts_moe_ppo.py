@@ -41,8 +41,6 @@ class CTSMoEPPO:
         training_mode: str = "mixed",
         distillation_loss_coef: float = 1.0,
         student_rollout_ratio: float = 0.15,
-        depth_task_loss_coef: float = 0.0,
-        depth_task_learning_rate: float | None = None,
         router_entropy_coef: float = 0.0,
         router_balance_coef: float = 0.0,
         router_logit_l2_coef: float = 0.0,
@@ -64,22 +62,16 @@ class CTSMoEPPO:
         self.transition = CTSMoERolloutStorage.Transition()
 
         self.optimizer = optim.Adam(self._ppo_update_parameters(training_mode), lr=learning_rate, eps=eps)
-        self.student_optimizer = optim.Adam(
-            self.policy.student_parameters(),
-            lr=learning_rate if student_learning_rate is None else student_learning_rate,
-            eps=eps,
-        )
-        depth_task_parameters = list(self.policy.depth_task_parameters())
-        self.depth_task_optimizer = (
+        student_parameters = list(self.policy.student_parameters())
+        self.student_optimizer = (
             optim.Adam(
-                depth_task_parameters,
-                lr=learning_rate if depth_task_learning_rate is None else depth_task_learning_rate,
+                student_parameters,
+                lr=learning_rate if student_learning_rate is None else student_learning_rate,
                 eps=eps,
             )
-            if depth_task_parameters
+            if student_parameters
             else None
         )
-
         self.num_learning_epochs = num_learning_epochs
         self.num_mini_batches = num_mini_batches
         self.clip_param = clip_param
@@ -96,7 +88,6 @@ class CTSMoEPPO:
             raise ValueError(f"training_mode must be one of {self.VALID_TRAINING_MODES}, got {training_mode!r}")
         self.training_mode = training_mode
         self.distillation_loss_coef = distillation_loss_coef
-        self.depth_task_loss_coef = depth_task_loss_coef
         if student_rollout_ratio < 0.0 or student_rollout_ratio > 1.0:
             raise ValueError("student_rollout_ratio must be in [0, 1]")
         self.student_rollout_ratio = student_rollout_ratio
@@ -249,9 +240,6 @@ class CTSMoEPPO:
         mean_router_balance_loss = 0.0
         mean_router_logit_l2_loss = 0.0
         mean_orth_loss = 0.0
-        mean_depth_task_loss = 0.0
-        mean_depth_task_accuracy = 0.0
-        num_depth_task_updates = 0
         orth_metric_sums: dict[str, float] = {}
         num_orth_metric_updates = 0
         mean_returns_norm_mean = 0.0
@@ -379,25 +367,6 @@ class CTSMoEPPO:
                 continue
             self.optimizer.step()
 
-            if (
-                self.depth_task_optimizer is not None
-                and self.depth_task_loss_coef > 0.0
-                and "depth_task_logits" in out
-            ):
-                depth_task_logits = self.policy.predict_task_from_depth(perception_batch)
-                depth_task_loss = F.cross_entropy(depth_task_logits, task_id_batch.long().view(-1))
-                depth_task_aux_loss = self.depth_task_loss_coef * depth_task_loss
-                if torch.isfinite(depth_task_aux_loss):
-                    self.depth_task_optimizer.zero_grad()
-                    depth_task_aux_loss.backward()
-                    nn.utils.clip_grad_norm_(list(self.policy.depth_task_parameters()), self.max_grad_norm)
-                    self.depth_task_optimizer.step()
-                    mean_depth_task_loss += depth_task_loss.item()
-                    mean_depth_task_accuracy += (
-                        depth_task_logits.argmax(dim=-1) == task_id_batch.long().view(-1)
-                    ).float().mean().item()
-                    num_depth_task_updates += 1
-
             mean_value_loss += value_loss.item()
             mean_surrogate_loss += surrogate_loss.item()
             mean_entropy += entropy_batch.mean().item()
@@ -419,6 +388,8 @@ class CTSMoEPPO:
         mean_distillation_loss = 0.0
         num_distill_updates = 0
         if self.training_mode == "mixed":
+            if self.student_optimizer is None:
+                raise RuntimeError("mixed training requires policy.student_parameters() to be non-empty")
             distill_generator = self.storage.mini_batch_generator(self.num_mini_batches, 1)
             for (
                 _proprio_batch,
@@ -469,8 +440,6 @@ class CTSMoEPPO:
             "router_balance": mean_router_balance_loss / num_updates,
             "router_logit_l2": mean_router_logit_l2_loss / num_updates,
             "orth_loss": mean_orth_loss / num_updates,
-            "depth_task_loss": mean_depth_task_loss / max(num_depth_task_updates, 1),
-            "depth_task_accuracy": mean_depth_task_accuracy / max(num_depth_task_updates, 1),
             "student_rollout_ratio": self.storage.student_masks.float().mean().item(),
             "skipped_nonfinite_updates": skipped_nonfinite_updates,
         }
@@ -571,10 +540,13 @@ class CTSMoEPPO:
                 "return_value": return_value,
             }
         if self.training_mode == "student_policy":
+            actor_proprio = proprio if getattr(self.policy, "uses_current_proprio_in_student_policy", False) else proprio_history[:, -1]
             return {
                 "mode": "student",
-                "proprio": proprio_history[:, -1],
+                "proprio": actor_proprio,
                 "task_id": task_id,
+                "height_scan": height_scan,
+                "privileged_obs": privileged_obs,
                 "proprio_history": proprio_history,
                 "perception": perception,
                 "return_value": return_value,

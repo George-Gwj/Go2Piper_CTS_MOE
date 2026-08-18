@@ -13,8 +13,10 @@ from .structure_aware_cts_moe import (
     OrthogonalMoEActor,
     SparseMultiCritic,
     StructureAwareCTSMoEPolicy,
+    StructureAwareDualRouterCTSMoEPolicy,
     StudentEncoder,
     TeacherEncoder,
+    DualRouterHistoryOrthogonalMoEActor,
     batched_gram_schmidt,
     compute_orthogonality_metrics,
 )

@@ -14,12 +14,14 @@ class ManagerRLEnv(ManagerBasedRLEnv):
     TASK_ASCEND = 1
     TASK_DESCEND = 2
     TASK_FLOATING_RING = 3
-    NUM_TASKS = 4
+    TASK_ROUGH = 4
+    NUM_TASKS = 5
     TASK_NAMES = (
         "flat",
         "ascend",
         "descend",
         "floating_ring",
+        "rough",
     )
 
     def __init__(self, cfg, render_mode=None, **kwargs):
@@ -216,7 +218,16 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         self._refresh_task_masks()
 
     def _enabled_task_ids(self) -> list[int]:
-        return list(range(self.NUM_TASKS))
+        task_cfg = self.cfg.multi_task_rewards
+        if task_cfg.task_sampling_weights is None:
+            return list(range(self.NUM_TASKS))
+        weights = torch.as_tensor(task_cfg.task_sampling_weights, dtype=torch.float)
+        if weights.numel() != self.NUM_TASKS:
+            raise ValueError(f"task_sampling_weights must have length {self.NUM_TASKS}")
+        enabled_tasks = torch.nonzero(weights > 0.0, as_tuple=False).view(-1).tolist()
+        if len(enabled_tasks) == 0:
+            raise ValueError("task_sampling_weights must enable at least one task")
+        return [int(task) for task in enabled_tasks]
 
     def _sample_task_ids(self, env_ids: torch.Tensor):
         task_cfg = self.cfg.multi_task_rewards
@@ -258,6 +269,7 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         self.mask_ascend = task_id == self.TASK_ASCEND
         self.mask_descend = task_id == self.TASK_DESCEND
         self.mask_floating_ring = task_id == self.TASK_FLOATING_RING
+        self.mask_rough = task_id == self.TASK_ROUGH
 
     def _get_rewards(self) -> torch.Tensor:
         reward = torch.zeros(self.num_envs, device=self.device)
@@ -270,6 +282,7 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         ascend_reward, ascend_logs = self._reward_ascend()
         descend_reward, descend_logs = self._reward_descend()
         floating_ring_reward, floating_ring_logs = self._reward_floating_ring()
+        rough_reward, rough_logs = self._reward_rough()
 
         reward += common_reward
 
@@ -278,11 +291,13 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         mask_ascend = task_id == self.TASK_ASCEND
         mask_descend = task_id == self.TASK_DESCEND
         mask_floating_ring = task_id == self.TASK_FLOATING_RING
+        mask_rough = task_id == self.TASK_ROUGH
 
         reward[mask_flat] += flat_reward[mask_flat]
         reward[mask_ascend] += ascend_reward[mask_ascend]
         reward[mask_descend] += descend_reward[mask_descend]
         reward[mask_floating_ring] += floating_ring_reward[mask_floating_ring]
+        reward[mask_rough] += rough_reward[mask_rough]
 
         self._log_reward_terms(
             common_logs=common_logs,
@@ -290,11 +305,13 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             ascend_logs=ascend_logs,
             descend_logs=descend_logs,
             floating_ring_logs=floating_ring_logs,
+            rough_logs=rough_logs,
             masks={
                 "flat": mask_flat,
                 "ascend": mask_ascend,
                 "descend": mask_descend,
                 "floating_ring": mask_floating_ring,
+                "rough": mask_rough,
             },
         )
         return reward
@@ -348,6 +365,15 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             for name, value in self._task_reward_logs["floating_ring"].items()
         }
         logs["floating_ring/placeholder"] = torch.zeros(self.num_envs, device=self.device)
+        return reward, logs
+
+    def _reward_rough(self) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+        reward = self._task_reward_groups["rough"].clone()
+        logs = {
+            f"rough/{name}": value
+            for name, value in self._task_reward_logs["rough"].items()
+        }
+        logs["rough/placeholder"] = torch.zeros(self.num_envs, device=self.device)
         return reward, logs
 
     def _masked_mean(self, value: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
@@ -622,7 +648,12 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             return {}
 
         terrain_levels = terrain.terrain_levels.float()
-        terrain_types = terrain.terrain_types.long()
+        terrain_cfg = getattr(getattr(terrain, "cfg", None), "terrain_generator", None)
+        terrain_types = (
+            self._terrain_column_task_ids(terrain_cfg)[terrain.terrain_types.long()]
+            if terrain_cfg is not None
+            else terrain.terrain_types.long()
+        )
         terrain_names = self._context_task_names()
 
         log: dict[str, torch.Tensor] = {}
@@ -639,6 +670,7 @@ class ManagerRLEnv(ManagerBasedRLEnv):
         ascend_logs: dict[str, torch.Tensor],
         descend_logs: dict[str, torch.Tensor],
         floating_ring_logs: dict[str, torch.Tensor],
+        rough_logs: dict[str, torch.Tensor],
         masks: dict[str, torch.Tensor],
     ):
         log = {}
@@ -652,11 +684,14 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             log[f"rew/{name}"] = self._masked_mean(value, masks["descend"])
         for name, value in floating_ring_logs.items():
             log[f"rew/{name}"] = self._masked_mean(value, masks["floating_ring"])
+        for name, value in rough_logs.items():
+            log[f"rew/{name}"] = self._masked_mean(value, masks["rough"])
 
         log["task/num_flat"] = masks["flat"].float().sum()
         log["task/num_ascend"] = masks["ascend"].float().sum()
         log["task/num_descend"] = masks["descend"].float().sum()
         log["task/num_floating_ring"] = masks["floating_ring"].float().sum()
+        log["task/num_rough"] = masks["rough"].float().sum()
         self._cts_moe_reward_log = log
         self.extras.setdefault("log", {}).update(log)
 
@@ -685,22 +720,42 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             tile_size = terrain_cfg.size[1] if getattr(task_cfg, "play_long_axis", "y") == "y" else terrain_cfg.size[0]
             local_pos = self.robot.data.root_pos_w[:, :2] - self.scene.env_origins[:, :2]
             progress = local_pos[:, 1] if getattr(task_cfg, "play_long_axis", "y") == "y" else local_pos[:, 0]
-            task_delta = torch.floor((progress + 0.5 * tile_size) / tile_size).long()
-            if getattr(task_cfg, "play_long_axis", "y") == "y" and hasattr(terrain, "terrain_types"):
-                task_id = terrain.terrain_types.long() + task_delta
+            tile_offset = torch.floor((progress + 0.5 * tile_size) / tile_size).long()
+            if terrain is not None and hasattr(terrain, "terrain_types"):
+                base_task_id = self._terrain_column_task_ids(terrain_cfg)[terrain.terrain_types.long()].to(
+                    device=progress.device
+                )
             else:
-                task_id = task_delta
+                base_task_id = torch.zeros_like(tile_offset)
+            task_id = base_task_id + tile_offset
             return torch.clamp(task_id, 0, self.NUM_TASKS - 1)
         if (
             terrain is not None
             and hasattr(terrain, "terrain_types")
             and terrain_cfg is not None
-            and terrain_cfg.num_cols == len(terrain_cfg.sub_terrains)
         ):
-            return terrain.terrain_types
+            return self._terrain_column_task_ids(terrain_cfg)[terrain.terrain_types.long()]
         if hasattr(self, "task_id"):
             return self.task_id
         return torch.zeros(self.num_envs, dtype=torch.long, device=self.device)
+
+    def _terrain_column_task_ids(self, terrain_cfg) -> torch.Tensor:
+        proportions = torch.tensor(
+            [float(sub_cfg.proportion) for sub_cfg in terrain_cfg.sub_terrains.values()],
+            dtype=torch.float,
+            device=self.device,
+        )
+        if proportions.numel() == 0 or torch.any(proportions < 0.0) or proportions.sum() <= 0.0:
+            return torch.arange(int(terrain_cfg.num_cols), dtype=torch.long, device=self.device).clamp(
+                max=self.NUM_TASKS - 1
+            )
+        cumulative = torch.cumsum(proportions / proportions.sum(), dim=0)
+        column_task_ids = []
+        for column in range(int(terrain_cfg.num_cols)):
+            threshold = float(column) / float(terrain_cfg.num_cols) + 0.001
+            task_id = torch.nonzero(threshold < cumulative, as_tuple=False)[0, 0]
+            column_task_ids.append(task_id)
+        return torch.stack(column_task_ids).long().clamp(max=self.NUM_TASKS - 1)
 
     def _context_task_names(self) -> tuple[str, ...]:
         terrain = getattr(self.scene, "terrain", None)

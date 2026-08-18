@@ -38,6 +38,8 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         # self.scene.terrain.terrain_type = "plane"
         # self.scene.terrain.terrain_generator = None
 
+        self.multi_task_rewards.task_sampling_weights = [1.0, 1.0, 1.0, 0.0, 1.0]
+
         ##  velocity command
         self.commands.base_velocity.curriculum_coeff = 4000
         # init

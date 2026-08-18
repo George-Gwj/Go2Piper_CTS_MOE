@@ -12,6 +12,7 @@ class RewardManager(RewardManagerBase):
         ("ascend", "_ascend"),
         ("descend", "_descend"),
         ("floating_ring", "_floating_ring"),
+        ("rough", "_rough"),
     )
 
     def __init__(self,cfg, env):
@@ -108,6 +109,7 @@ class RewardManager(RewardManagerBase):
         - ``_ascend`` are used only for ascending stair terrain envs.
         - ``_descend`` are used only for descending stair terrain envs.
         - ``_floating_ring`` are used only for floating-ring terrain envs.
+        - ``_rough`` are used only for rough terrain envs.
         """
         grouped_rewards = {
             group: torch.zeros(self.num_envs, dtype=torch.float, device=self.device)
@@ -155,6 +157,7 @@ class RewardManager(RewardManagerBase):
             "ascend": self.env.TASK_ASCEND,
             "descend": self.env.TASK_DESCEND,
             "floating_ring": self.env.TASK_FLOATING_RING,
+            "rough": self.env.TASK_ROUGH,
         }
         if group_name not in task_constants:
             return None

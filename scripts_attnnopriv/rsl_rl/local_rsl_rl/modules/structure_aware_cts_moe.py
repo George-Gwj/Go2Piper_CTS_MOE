@@ -429,29 +429,6 @@ class StudentEncoder(nn.Module):
         return self.projection(torch.cat([temporal_feature, proprio_history_feature], dim=-1))
 
 
-class DepthTaskPredictor(nn.Module):
-    """MLP classifier that predicts the terrain task id from a depth image."""
-
-    def __init__(
-        self,
-        num_tasks: int,
-        hidden_dims: Sequence[int] = (512, 256),
-        activation: str | type[nn.Module] | nn.Module = "elu",
-    ):
-        super().__init__()
-        self.num_tasks = num_tasks
-        self.net = build_lazy_mlp(
-            hidden_dims=hidden_dims,
-            output_dim=num_tasks,
-            activation=activation,
-        )
-
-    def forward(self, depth: torch.Tensor) -> torch.Tensor:
-        if depth.dim() < 2:
-            raise ValueError(f"depth must include batch and feature dimensions, got {tuple(depth.shape)}")
-        return self.net(depth.flatten(start_dim=1))
-
-
 class MoEActor(nn.Module):
     """Dense Mixture-of-Experts actor with soft routing."""
 
@@ -868,8 +845,6 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         student_depth_filters: Sequence[int] = (16, 32, 64),
         student_gru_hidden_dim: int = 256,
         student_gru_num_layers: int = 1,
-        depth_task_predictor_hidden_dims: Sequence[int] = (512, 256),
-        enable_depth_task_prediction: bool = False,
         actor_type: str = "cts_moe",
         num_experts: int = 4,
         num_tasks: int = 4,
@@ -893,6 +868,7 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         init_log_std: float = 0.0,
         learnable_log_std: bool = True,
         semantic_decoupled_teacher: bool = True,
+        critic_latent_source: str = "actor",
         activation: str | type[nn.Module] | nn.Module = "elu",
     ):
         super().__init__()
@@ -900,10 +876,11 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         self.latent_dim = latent_dim
         if actor_type not in ("cts_moe", "orthogonal_cts_moe"):
             raise ValueError("actor_type must be 'cts_moe' or 'orthogonal_cts_moe'")
+        if critic_latent_source not in ("actor", "teacher"):
+            raise ValueError("critic_latent_source must be 'actor' or 'teacher'")
         self.actor_type = actor_type
+        self.critic_latent_source = critic_latent_source
         self.log_expert_metrics = log_expert_metrics
-        self.enable_depth_task_prediction = enable_depth_task_prediction
-
         self.teacher_encoder = TeacherEncoder(
             privileged_dim=privileged_dim,
             latent_dim=latent_dim,
@@ -933,15 +910,6 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             gru_hidden_dim=student_gru_hidden_dim,
             gru_num_layers=student_gru_num_layers,
             activation=activation,
-        )
-        self.depth_task_predictor = (
-            DepthTaskPredictor(
-                num_tasks=num_tasks,
-                hidden_dims=depth_task_predictor_hidden_dims,
-                activation=activation,
-            )
-            if enable_depth_task_prediction
-            else None
         )
         if actor_type == "orthogonal_cts_moe":
             self.moe_actor = OrthogonalMoEActor(
@@ -1008,11 +976,6 @@ class StructureAwareCTSMoEPolicy(nn.Module):
         """Parameters for student encoder distillation updates."""
         yield from self.student_encoder.parameters()
 
-    def depth_task_parameters(self):
-        """Parameters for supervised visual terrain-task prediction."""
-        if self.depth_task_predictor is not None:
-            yield from self.depth_task_predictor.parameters()
-
     def get_action_distribution(self, action_mean: torch.Tensor, action_std: torch.Tensor) -> Normal:
         if not torch.isfinite(action_mean).all():
             bad_count = (~torch.isfinite(action_mean)).sum().item()
@@ -1038,11 +1001,6 @@ class StructureAwareCTSMoEPolicy(nn.Module):
 
     def encode_student(self, proprio_history: torch.Tensor, perception: torch.Tensor | None = None) -> torch.Tensor:
         return self.student_encoder(proprio_history, perception)
-
-    def predict_task_from_depth(self, perception: torch.Tensor) -> torch.Tensor:
-        if self.depth_task_predictor is None:
-            raise RuntimeError("Depth task prediction is disabled for this policy")
-        return self.depth_task_predictor(perception)
 
     def act_teacher(
         self,
@@ -1179,16 +1137,412 @@ class StructureAwareCTSMoEPolicy(nn.Module):
             output["teacher_task_logits"] = teacher_task_logits
         if z_student is not None:
             output["z_student"] = z_student
-        if self.depth_task_predictor is not None and perception is not None:
-            output["depth_task_logits"] = self.predict_task_from_depth(perception)
         if student_mask is not None:
             output["student_mask"] = student_mask
 
         if return_value:
             if task_id is None:
                 raise ValueError("task_id is required when return_value=True")
+            critic_z = z
+            if self.critic_latent_source == "teacher":
+                if height_scan is None or privileged_obs is None:
+                    raise ValueError("height_scan and privileged_obs are required for critic_latent_source='teacher'")
+                critic_z = self.encode_teacher(height_scan, privileged_obs)
             critic_output = self.multi_critic(
-                z,
+                critic_z,
+                proprio,
+                task_id,
+                return_all_values=return_all_values,
+            )
+            if return_all_values:
+                value, all_values = critic_output
+                output["value"] = value
+                output["all_values"] = all_values
+            else:
+                output["value"] = critic_output
+
+        return output
+
+
+class DualRouterHistoryOrthogonalMoEActor(nn.Module):
+    """History-basis MoE actor with separate leg and arm routers/action heads.
+
+    Expert bases are generated directly from proprioception history.  Current
+    proprioception drives independent leg and arm routers over the same basis.
+    """
+
+    DEFAULT_EXPERT_NAMES = OrthogonalMoEActor.DEFAULT_EXPERT_NAMES
+
+    def __init__(
+        self,
+        proprio_dim: int,
+        action_dim: int,
+        num_experts: int = 4,
+        expert_feature_dim: int = 128,
+        expert_hidden_dims: Sequence[int] = (256, 128),
+        router_hidden_dims: Sequence[int] = (128, 64),
+        action_head_hidden_dims: Sequence[int] = (256, 128),
+        expert_names: Sequence[str] | None = None,
+        leg_action_dim: int = 12,
+        arm_action_dim: int = 6,
+        orthogonal_mode: str = "gram_schmidt",
+        gate_activation: str = "tanh",
+        use_expert_layernorm: bool = True,
+        use_moe_output_layernorm: bool = True,
+        gram_schmidt_eps: float = 1e-6,
+        activation: str | type[nn.Module] | nn.Module = "elu",
+    ):
+        super().__init__()
+        if num_experts < 1:
+            raise ValueError("num_experts must be positive")
+        if expert_feature_dim < num_experts and orthogonal_mode == "gram_schmidt":
+            raise ValueError("expert_feature_dim must be >= num_experts for Gram-Schmidt orthogonalization")
+        if orthogonal_mode not in ("none", "gram_schmidt"):
+            raise ValueError("orthogonal_mode must be 'none' or 'gram_schmidt'")
+        if gate_activation not in ("softmax", "tanh", "sigmoid", "linear", "l2"):
+            raise ValueError("gate_activation must be 'softmax', 'tanh', 'sigmoid', 'linear', or 'l2'")
+        if leg_action_dim + arm_action_dim != action_dim:
+            raise ValueError(
+                f"leg_action_dim + arm_action_dim must equal action_dim: "
+                f"{leg_action_dim} + {arm_action_dim} != {action_dim}"
+            )
+
+        self.proprio_dim = proprio_dim
+        self.action_dim = action_dim
+        self.leg_action_dim = leg_action_dim
+        self.arm_action_dim = arm_action_dim
+        self.num_experts = num_experts
+        self.expert_feature_dim = expert_feature_dim
+        self.orthogonal_mode = orthogonal_mode
+        self.gate_activation = gate_activation
+        self.gram_schmidt_eps = gram_schmidt_eps
+
+        if expert_names is None:
+            expert_names = self.DEFAULT_EXPERT_NAMES[:num_experts]
+        if len(expert_names) != num_experts:
+            raise ValueError("expert_names length must match num_experts")
+        self.expert_names = tuple(expert_names)
+
+        self.experts = nn.ModuleList(
+            build_lazy_mlp(
+                hidden_dims=expert_hidden_dims,
+                output_dim=expert_feature_dim,
+                activation=activation,
+            )
+            for _ in range(num_experts)
+        )
+        self.expert_norms = nn.ModuleList(
+            nn.LayerNorm(expert_feature_dim) if use_expert_layernorm else nn.Identity()
+            for _ in range(num_experts)
+        )
+        self.leg_router = build_mlp(
+            proprio_dim,
+            hidden_dims=router_hidden_dims,
+            output_dim=num_experts,
+            activation=activation,
+        )
+        self.arm_router = build_mlp(
+            proprio_dim,
+            hidden_dims=router_hidden_dims,
+            output_dim=num_experts,
+            activation=activation,
+        )
+        self.moe_output_norm = nn.LayerNorm(expert_feature_dim) if use_moe_output_layernorm else nn.Identity()
+        self.leg_action_head = build_mlp(
+            expert_feature_dim,
+            hidden_dims=action_head_hidden_dims,
+            output_dim=leg_action_dim,
+            activation=activation,
+        )
+        self.arm_action_head = build_mlp(
+            expert_feature_dim,
+            hidden_dims=action_head_hidden_dims,
+            output_dim=arm_action_dim,
+            activation=activation,
+        )
+
+    def _check_inputs(self, proprio_history: torch.Tensor, proprio: torch.Tensor) -> None:
+        if proprio_history.dim() != 3:
+            raise ValueError(f"proprio_history must be [B, H, proprio_dim], got {tuple(proprio_history.shape)}")
+        if proprio_history.shape[-1] != self.proprio_dim:
+            raise ValueError(f"Expected proprio_history dim {self.proprio_dim}, got {proprio_history.shape[-1]}")
+        if proprio.dim() != 2 or proprio.shape[-1] != self.proprio_dim:
+            raise ValueError(f"proprio must be [B, {self.proprio_dim}], got {tuple(proprio.shape)}")
+        if proprio_history.shape[0] != proprio.shape[0]:
+            raise ValueError(
+                f"proprio_history and proprio must have the same batch size, "
+                f"got {proprio_history.shape[0]} and {proprio.shape[0]}"
+            )
+
+    def apply_gate_activation(self, gate_logits: torch.Tensor) -> torch.Tensor:
+        if self.gate_activation == "softmax":
+            return torch.softmax(gate_logits, dim=-1)
+        if self.gate_activation == "tanh":
+            return torch.tanh(gate_logits)
+        if self.gate_activation == "sigmoid":
+            return torch.sigmoid(gate_logits)
+        if self.gate_activation == "linear":
+            return gate_logits
+        if self.gate_activation == "l2":
+            return gate_logits / (gate_logits.norm(dim=-1, keepdim=True) + self.gram_schmidt_eps)
+        raise ValueError(f"Unknown gate_activation: {self.gate_activation}")
+
+    def _mix_feature(self, expert_features: torch.Tensor, gate_coeffs: torch.Tensor) -> torch.Tensor:
+        mixed_feature = torch.sum(gate_coeffs.unsqueeze(-1) * expert_features, dim=1)
+        return self.moe_output_norm(mixed_feature)
+
+    def _expert_actions_from_features(self, features: torch.Tensor) -> torch.Tensor:
+        normalized_features = self.moe_output_norm(features)
+        batch_size, num_experts, feature_dim = normalized_features.shape
+        flat_features = normalized_features.reshape(batch_size * num_experts, feature_dim)
+        leg_actions = self.leg_action_head(flat_features).view(batch_size, num_experts, self.leg_action_dim)
+        arm_actions = self.arm_action_head(flat_features).view(batch_size, num_experts, self.arm_action_dim)
+        return torch.cat([leg_actions, arm_actions], dim=-1)
+
+    def forward(
+        self,
+        proprio_history: torch.Tensor,
+        proprio: torch.Tensor,
+        task_id: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, dict[str, torch.Tensor]]:
+        del task_id
+        self._check_inputs(proprio_history, proprio)
+        history_flat = proprio_history.flatten(start_dim=1)
+        expert_features_raw = torch.stack(
+            [norm(expert(history_flat)) for expert, norm in zip(self.experts, self.expert_norms)],
+            dim=1,
+        )
+        if self.orthogonal_mode == "gram_schmidt":
+            expert_features_orth = batched_gram_schmidt(expert_features_raw, eps=self.gram_schmidt_eps)
+        elif self.orthogonal_mode == "none":
+            expert_features_orth = expert_features_raw
+        else:
+            raise ValueError(f"Unsupported orthogonal_mode: {self.orthogonal_mode}")
+
+        leg_router_logits = self.leg_router(proprio)
+        arm_router_logits = self.arm_router(proprio)
+        leg_gate_coeffs = self.apply_gate_activation(leg_router_logits)
+        arm_gate_coeffs = self.apply_gate_activation(arm_router_logits)
+        leg_feature = self._mix_feature(expert_features_orth, leg_gate_coeffs)
+        arm_feature = self._mix_feature(expert_features_orth, arm_gate_coeffs)
+        leg_action_mean = self.leg_action_head(leg_feature)
+        arm_action_mean = self.arm_action_head(arm_feature)
+        action_mean = torch.cat([leg_action_mean, arm_action_mean], dim=-1)
+
+        router_weights = 0.5 * (leg_gate_coeffs + arm_gate_coeffs)
+        router_logits = 0.5 * (leg_router_logits + arm_router_logits)
+        expert_actions = self._expert_actions_from_features(expert_features_orth)
+        extras = {
+            "gate_activation": self.gate_activation,
+            "gate_coeffs": router_weights,
+            "gate_weights": router_weights,
+            "leg_router_weights": leg_gate_coeffs,
+            "arm_router_weights": arm_gate_coeffs,
+            "leg_router_logits": leg_router_logits,
+            "arm_router_logits": arm_router_logits,
+            "leg_mixed_feature": leg_feature,
+            "arm_mixed_feature": arm_feature,
+            "expert_features_raw": expert_features_raw,
+            "expert_features_orth": expert_features_orth,
+        }
+        return action_mean, router_weights, expert_actions, router_logits, extras
+
+
+class StructureAwareDualRouterCTSMoEPolicy(nn.Module):
+    """CTS-MoE policy with history-basis actor and separate leg/arm routers."""
+
+    def __init__(
+        self,
+        proprio_dim: int,
+        action_dim: int,
+        privileged_dim: int,
+        latent_dim: int = 32,
+        height_channels: int = 3,
+        teacher_context_dim: int = 0,
+        teacher_height_flat_dim: int | None = None,
+        teacher_height_feature_dim: int = 128,
+        teacher_privileged_feature_dim: int = 32,
+        teacher_height_encoder_type: str = "mlp",
+        teacher_height_hidden_dims: Sequence[int] = (512, 256),
+        teacher_height_cnn_filters: Sequence[int] = (16, 32, 64),
+        teacher_privileged_hidden_dims: Sequence[int] = (512, 256),
+        num_experts: int = 4,
+        num_tasks: int = 4,
+        expert_feature_dim: int = 128,
+        expert_hidden_dims: Sequence[int] = (256, 128),
+        router_hidden_dims: Sequence[int] = (128, 64),
+        action_head_hidden_dims: Sequence[int] = (256, 128),
+        expert_names: Sequence[str] | None = None,
+        leg_action_dim: int = 12,
+        arm_action_dim: int = 6,
+        orthogonal_mode: str = "gram_schmidt",
+        gate_activation: str = "tanh",
+        use_expert_layernorm: bool = True,
+        use_moe_output_layernorm: bool = True,
+        gram_schmidt_eps: float = 1e-6,
+        log_expert_metrics: bool = True,
+        critic_hidden_dims: Sequence[int] = (256, 128),
+        critic_shared_trunk: bool = False,
+        critic_trunk_hidden_dims: Sequence[int] | None = None,
+        critic_head_hidden_dims: Sequence[int] = (64,),
+        init_log_std: float = 0.0,
+        learnable_log_std: bool = True,
+        semantic_decoupled_teacher: bool = False,
+        activation: str | type[nn.Module] | nn.Module = "elu",
+        **_unused_kwargs: Any,
+    ):
+        super().__init__()
+        self.action_dim = action_dim
+        self.latent_dim = latent_dim
+        self.critic_latent_source = "teacher"
+        self.log_expert_metrics = log_expert_metrics
+        self.uses_current_proprio_in_student_policy = True
+        self.teacher_encoder = TeacherEncoder(
+            privileged_dim=privileged_dim,
+            latent_dim=latent_dim,
+            height_channels=height_channels,
+            num_tasks=num_tasks,
+            context_dim=teacher_context_dim,
+            height_flat_dim=teacher_height_flat_dim,
+            semantic_decoupled=semantic_decoupled_teacher,
+            height_feature_dim=teacher_height_feature_dim,
+            privileged_feature_dim=teacher_privileged_feature_dim,
+            height_encoder_type=teacher_height_encoder_type,
+            height_hidden_dims=teacher_height_hidden_dims,
+            height_cnn_filters=teacher_height_cnn_filters,
+            privileged_hidden_dims=teacher_privileged_hidden_dims,
+            activation=activation,
+        )
+        self.moe_actor = DualRouterHistoryOrthogonalMoEActor(
+            proprio_dim=proprio_dim,
+            action_dim=action_dim,
+            num_experts=num_experts,
+            expert_feature_dim=expert_feature_dim,
+            expert_hidden_dims=expert_hidden_dims,
+            router_hidden_dims=router_hidden_dims,
+            action_head_hidden_dims=action_head_hidden_dims,
+            expert_names=expert_names,
+            leg_action_dim=leg_action_dim,
+            arm_action_dim=arm_action_dim,
+            orthogonal_mode=orthogonal_mode,
+            gate_activation=gate_activation,
+            use_expert_layernorm=use_expert_layernorm,
+            use_moe_output_layernorm=use_moe_output_layernorm,
+            gram_schmidt_eps=gram_schmidt_eps,
+            activation=activation,
+        )
+        self.multi_critic = SparseMultiCritic(
+            latent_dim=latent_dim,
+            proprio_dim=proprio_dim,
+            num_tasks=num_tasks,
+            critic_hidden_dims=critic_hidden_dims,
+            critic_shared_trunk=critic_shared_trunk,
+            trunk_hidden_dims=critic_trunk_hidden_dims,
+            head_hidden_dims=critic_head_hidden_dims,
+            activation=activation,
+        )
+
+        log_std = torch.full((action_dim,), float(init_log_std))
+        if learnable_log_std:
+            self.log_std = nn.Parameter(log_std)
+        else:
+            self.register_buffer("log_std", log_std)
+
+    @property
+    def action_std(self) -> torch.Tensor:
+        return torch.exp(self.log_std)
+
+    def ppo_parameters(self):
+        modules = [self.teacher_encoder, self.moe_actor, self.multi_critic]
+        for module in modules:
+            yield from module.parameters()
+        if isinstance(self.log_std, nn.Parameter):
+            yield self.log_std
+
+    def student_parameters(self):
+        return iter(())
+
+    def get_action_distribution(self, action_mean: torch.Tensor, action_std: torch.Tensor) -> Normal:
+        if not torch.isfinite(action_mean).all():
+            bad_count = (~torch.isfinite(action_mean)).sum().item()
+            raise ValueError(f"action_mean contains {bad_count} non-finite values before Normal()")
+        if not torch.isfinite(action_std).all():
+            bad_count = (~torch.isfinite(action_std)).sum().item()
+            raise ValueError(f"action_std contains {bad_count} non-finite values before Normal()")
+        return Normal(action_mean, action_std)
+
+    def encode_teacher(
+        self,
+        height_scan: torch.Tensor,
+        privileged_obs: torch.Tensor,
+        return_task_id: bool = False,
+        return_task_logits: bool = False,
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        return self.teacher_encoder(
+            height_scan,
+            privileged_obs,
+            return_task_id=return_task_id,
+            return_task_logits=return_task_logits,
+        )
+
+    def forward(
+        self,
+        *,
+        mode: str,
+        proprio: torch.Tensor,
+        task_id: torch.Tensor | None = None,
+        height_scan: torch.Tensor | None = None,
+        privileged_obs: torch.Tensor | None = None,
+        proprio_history: torch.Tensor | None = None,
+        perception: torch.Tensor | None = None,
+        student_mask: torch.Tensor | None = None,
+        detach_student_in_mixed: bool = False,
+        return_value: bool = False,
+        return_all_values: bool = False,
+    ) -> dict[str, Any]:
+        del perception, student_mask, detach_student_in_mixed
+        if mode not in ("teacher", "student", "mixed"):
+            raise ValueError("mode must be 'teacher', 'student', or 'mixed'")
+        if proprio.dim() != 2:
+            raise ValueError(f"proprio must be [B, proprio_dim], got {tuple(proprio.shape)}")
+        if proprio_history is None:
+            raise ValueError("StructureAwareDualRouterCTSMoEPolicy requires proprio_history for the actor path")
+
+        action_mean, router_weights, expert_actions, router_logits, actor_extras = self.moe_actor(
+            proprio_history,
+            proprio,
+            task_id=task_id,
+        )
+        action_std = self.action_std.expand_as(action_mean)
+        output = {
+            "z": None,
+            "action_mean": action_mean,
+            "action_std": action_std,
+            "distribution": self.get_action_distribution(action_mean, action_std),
+            "router_weights": router_weights,
+            "expert_actions": expert_actions,
+            "router_logits": router_logits,
+        }
+        output.update(actor_extras)
+
+        if height_scan is not None and privileged_obs is not None:
+            z_teacher, teacher_task_id, teacher_task_logits = self.encode_teacher(
+                height_scan,
+                privileged_obs,
+                return_task_id=True,
+                return_task_logits=True,
+            )
+            output["z_teacher"] = z_teacher
+            output["teacher_task_id"] = teacher_task_id
+            output["teacher_task_logits"] = teacher_task_logits
+        elif return_value:
+            raise ValueError("height_scan and privileged_obs are required when return_value=True")
+
+        if return_value:
+            if task_id is None:
+                raise ValueError("task_id is required when return_value=True")
+            critic_output = self.multi_critic(
+                output["z_teacher"],
                 proprio,
                 task_id,
                 return_all_values=return_all_values,

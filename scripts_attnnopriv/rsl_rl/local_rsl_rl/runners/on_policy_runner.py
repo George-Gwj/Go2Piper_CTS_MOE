@@ -11,7 +11,11 @@ import torch
 import local_rsl_rl
 from local_rsl_rl.algorithms import CTSMoEPPO, HybridLegArmPPO
 from local_rsl_rl.env import VecEnv
-from local_rsl_rl.modules import HybridLegArmCTSMoEPolicy, StructureAwareCTSMoEPolicy
+from local_rsl_rl.modules import (
+    HybridLegArmCTSMoEPolicy,
+    StructureAwareCTSMoEPolicy,
+    StructureAwareDualRouterCTSMoEPolicy,
+)
 from local_rsl_rl.utils import store_code_state
 
 
@@ -36,11 +40,15 @@ class OnPolicyRunner:
             policy_cls = HybridLegArmCTSMoEPolicy
             alg_cls = HybridLegArmPPO
         else:
-            if policy_class_name != "StructureAwareCTSMoEPolicy":
+            policy_registry = {
+                "StructureAwareCTSMoEPolicy": StructureAwareCTSMoEPolicy,
+                "StructureAwareDualRouterCTSMoEPolicy": StructureAwareDualRouterCTSMoEPolicy,
+            }
+            if policy_class_name not in policy_registry:
                 raise ValueError(f"Unsupported CTS-MoE policy class: {policy_class_name}")
             if alg_class_name != "CTSMoEPPO":
                 raise ValueError(f"Unsupported CTS-MoE algorithm class: {alg_class_name}")
-            policy_cls = StructureAwareCTSMoEPolicy
+            policy_cls = policy_registry[policy_class_name]
             alg_cls = CTSMoEPPO
         self.policy_cfg = self._filter_constructor_cfg(policy_cls, self.policy_cfg, exclude={"self"})
         self.alg_cfg = self._filter_constructor_cfg(alg_cls, self.alg_cfg)
@@ -476,7 +484,8 @@ class OnPolicyRunner:
             saved_dict["student_optimizer_state_dict"] = self.alg.student_optimizer.state_dict()
         else:
             saved_dict["optimizer_state_dict"] = self.alg.optimizer.state_dict()
-            saved_dict["student_optimizer_state_dict"] = self.alg.student_optimizer.state_dict()
+            if self.alg.student_optimizer is not None:
+                saved_dict["student_optimizer_state_dict"] = self.alg.student_optimizer.state_dict()
         if getattr(self.alg, "popart", None) is not None:
             saved_dict["popart_state_dict"] = self.alg.popart.state_dict()
         torch.save(saved_dict, path)
@@ -496,7 +505,7 @@ class OnPolicyRunner:
                     self.alg.student_optimizer.load_state_dict(loaded_dict["student_optimizer_state_dict"])
             else:
                 self.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
-                if "student_optimizer_state_dict" in loaded_dict:
+                if self.alg.student_optimizer is not None and "student_optimizer_state_dict" in loaded_dict:
                     self.alg.student_optimizer.load_state_dict(loaded_dict["student_optimizer_state_dict"])
         if getattr(self.alg, "popart", None) is not None and "popart_state_dict" in loaded_dict:
             self.alg.popart.load_state_dict(loaded_dict["popart_state_dict"])

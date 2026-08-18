@@ -123,6 +123,16 @@ gym.register(
 )
 
 gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Ortho-DualRouter",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoStudentEnvCfg",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho_dual_router:Go2PiperDualRouterCTSMoERunnerCfg",
+    },
+)
+
+gym.register(
     id="Go2Piper-Attention-CTS-MoE-Ortho-Teacher",
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
     disable_env_checker=True,
@@ -157,7 +167,7 @@ gym.register(
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
     disable_env_checker=True,
     kwargs={
-        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "env_cfg_entry_point": f"{__name__}.moe_ortho_env_cfg:Go2PiperMoEOrthoStudentEnvCfg_PLAY",
         "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg_moe_ortho:Go2PiperCTSMoERunnerCfg",
     },
 )
@@ -510,7 +520,6 @@ gym.register(
     },
 )
 
-
 gym.register(
     id="Go2Piper-Attention-CTS-MoE-Leg-Ortho-LatentRouter-TaskHeads",
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
@@ -525,17 +534,32 @@ gym.register(
 )
 
 gym.register(
-    id="Go2Piper-Attention-CTS-MoE-Leg-Ortho-Depth-LatentRouter-TaskHeads",
+    id="Go2Piper-Attention-CTS-MoE-Leg-Ortho-Depth",
     entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
     disable_env_checker=True,
     kwargs={
         "env_cfg_entry_point": f"{__name__}.moe_leg_ortho_depth_env_cfg:Go2PiperMoEOrthoEnvCfg",
         "rsl_rl_cfg_entry_point": (
             f"{agents.__name__}.rsl_rl_ppo_cfg_moe_leg_ortho_depth:"
-            "Go2PiperLegCTSMoELatentRouterTaskHeadsRunnerCfg"
+            "Go2PiperLegCTSMoEDepthTeacherRunnerCfg"
         ),
     },
 )
+
+
+gym.register(
+    id="Go2Piper-Attention-CTS-MoE-Leg-Ortho-Depth-Teacher-Play",
+    entry_point="Go2Piper_Attention.env.manager_env:ManagerRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.moe_leg_ortho_depth_env_cfg:Go2PiperMoEOrthoEnvCfg_PLAY",
+        "rsl_rl_cfg_entry_point": (
+            f"{agents.__name__}.rsl_rl_ppo_cfg_moe_leg_ortho_depth:"
+            "Go2PiperLegCTSMoEDepthTeacherRunnerCfg"
+        ),
+    },
+)
+
 
 gym.register(
     id="Go2Piper-Attention-CTS-MoE-Leg-Ortho-TaskRouter-SharedHead-Play",
