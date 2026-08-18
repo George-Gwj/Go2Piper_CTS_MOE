@@ -333,7 +333,7 @@ class UniformPoseCommand(CommandTerm):
         self.pose_command_w[:, :3], self.pose_command_w[:, 3:] = combine_frame_transforms(
             self.robot.data.root_pos_w,
             self.robot.data.root_quat_w,
-            torch.cat([self.pose_command[:, :2], (self.pose_command[:, 2:3] - torch.clamp(self.robot.data.root_pos_w[:, 2:3] ,max=0.3))],dim = -1),
+            self.pose_command[:, :3],
             self.pose_command[:, 3:],
         )
 

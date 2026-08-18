@@ -471,7 +471,7 @@ class CommandsCfg:
         ranges_final =mdp.command_cfg.UniformPoseCommandCfg.Ranges(
             pos_x=(0.4, 0.6),
             pos_y=(-0.35, 0.35),
-            pos_z=(0.1, 0.55), # world frame not base frame
+            pos_z=(0.1, 0.55), # base frame
 
             roll=(-0.0, 0.0),
             pitch=(-0.0, -0.0),  # depends on end-effector axis
@@ -480,7 +480,7 @@ class CommandsCfg:
         ranges = mdp.command_cfg.UniformPoseCommandCfg.Ranges(
             pos_x=(0.4, 0.6),
             pos_y=(-0.35, 0.35),
-            pos_z=(0.1, 0.55), # world frame not base frame
+            pos_z=(0.1, 0.55), # base frame
 
             roll=(-0.0, 0.0),
             pitch=(-0.0, -0.0),  # depends on end-effector axis
@@ -489,7 +489,7 @@ class CommandsCfg:
         ranges_init=mdp.command_cfg.UniformPoseCommandCfg.Ranges(
             pos_x=(0.45, 0.5), 
             pos_y=(-0.05, 0.05),
-            pos_z=(0.35, 0.4), # world frame not base frame
+            pos_z=(0.35, 0.4), # base frame
 
             roll=(-0.0, 0.0),
             pitch=(-0.0, 0.0),  # depends on end-effector axis

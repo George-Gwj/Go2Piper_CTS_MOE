@@ -422,7 +422,9 @@ class ManagerRLEnv(ManagerBasedRLEnv):
             "ee_pose/position_error_base_frame": torch.norm(base_frame_error, dim=-1),
             "ee_pose/position_error_xy_b": torch.norm(base_frame_error[:, :2], dim=-1),
             "ee_pose/position_error_z_b": base_frame_error[:, 2],
-            # Backward-compatible alias for old logs.
+            "ee_pose/position_error_z_base_frame": base_frame_error[:, 2],
+            # Backward-compatible alias for old logs.  The command is base-frame,
+            # despite the historical "terrain" name.
             "ee_pose/position_error_z_terrain": base_frame_error[:, 2],
         }
 
