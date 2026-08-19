@@ -54,6 +54,7 @@ class RslRlVecEnvWrapper(VecEnv):
         configured_history_length = getattr(self.unwrapped.cfg.observations.proprio_history, "history_length", None)
         self.proprio_history_length = int(configured_history_length or 5)
         self.proprio_history_dim = self.proprio_history_flat_dim // self.proprio_history_length
+        self._amp_joint_ids = None
 
         self._modify_action_space()
         self.env.reset()
@@ -164,7 +165,39 @@ class RslRlVecEnvWrapper(VecEnv):
             "height_scan": height_scan,
             "perception": perception,
             "task_id": task_id.long(),
+            "amp_obs": self._extract_amp_observation(),
         }
+
+    def _extract_amp_observation(self) -> torch.Tensor:
+        robot = self.unwrapped.scene["robot"]
+        if self._amp_joint_ids is None:
+            joint_ids, _ = robot.find_joints(
+                [
+                    "FR_hip_joint",
+                    "FR_thigh_joint",
+                    "FR_calf_joint",
+                    "FL_hip_joint",
+                    "FL_thigh_joint",
+                    "FL_calf_joint",
+                    "RR_hip_joint",
+                    "RR_thigh_joint",
+                    "RR_calf_joint",
+                    "RL_hip_joint",
+                    "RL_thigh_joint",
+                    "RL_calf_joint",
+                ],
+                preserve_order=True,
+            )
+            self._amp_joint_ids = joint_ids
+        return torch.cat(
+            [
+                robot.data.joint_pos[:, self._amp_joint_ids],
+                robot.data.root_lin_vel_b,
+                robot.data.root_ang_vel_b,
+                robot.data.joint_vel[:, self._amp_joint_ids],
+            ],
+            dim=-1,
+        )
 
     def _extract_single_term_group(self, group_obs, term_name: str) -> torch.Tensor:
         if isinstance(group_obs, dict):

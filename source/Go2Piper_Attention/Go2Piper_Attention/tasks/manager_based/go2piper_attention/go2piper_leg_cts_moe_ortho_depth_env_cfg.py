@@ -99,7 +99,7 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
     curriculum=True,
     size=(8.0, 8.0),
     num_rows=10,
-    num_cols=4,
+    num_cols=10,
     horizontal_scale=0.05,
     vertical_scale=0.005,
     slope_threshold=0.75,
@@ -109,19 +109,19 @@ CTS_MOE_TERRAINS_CFG = TerrainGeneratorCfg(
             proportion=1.0,
         ),
         "ascend": terrain_gen.HfPyramidStairsTerrainCfg(
-            proportion=1.0,
+            proportion=3.0,
             step_height_range=(0.03, 0.13),
             step_width=0.31,
             platform_width=2.0,
         ),
         "descend": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
-            proportion=1.0,
+            proportion=3.0,
             step_height_range=(0.03, 0.13),
             step_width=0.31,
             platform_width=2.0,
         ),
         "floating_ring": terrain_gen.MeshFloatingRingTerrainCfg(
-            proportion=0.0,
+            proportion=2.0,
             platform_width=2.0,
             ring_width_range=(0.6, 1.8),
             ring_height_range=(0.45, 0.65),
@@ -516,7 +516,7 @@ class ObservationsCfg:
             func=leg_obs.generated_commands,
             params={"command_name": "base_velocity"},
         )  # dim = 3
-        height_command = ObsTerm(func=base_height_command)  # dim = 1
+        # height_command = ObsTerm(func=base_height_command)  # dim = 1
         projected_gravity = ObsTerm(
             func=leg_obs.projected_gravity,
             noise=Unoise(n_min=-0.05, n_max=0.05),
@@ -540,7 +540,7 @@ class ObservationsCfg:
             history_length=5,
             params={"command_name": "base_velocity"},
         )  # dim = 3
-        height_command = ObsTerm(func=base_height_command, history_length=5)  # dim = 1
+        # height_command = ObsTerm(func=base_height_command, history_length=5)  # dim = 1
         projected_gravity = ObsTerm(
             func=leg_obs.projected_gravity,
             history_length=5,
@@ -565,7 +565,7 @@ class ObservationsCfg:
             func=leg_obs.generated_commands,
             params={"command_name": "base_velocity"},
         )  # dim = 3
-        height_command = ObsTerm(func=base_height_command)  # dim = 1
+        # height_command = ObsTerm(func=base_height_command)  # dim = 1
         projected_gravity = ObsTerm(func=leg_obs.projected_gravity)  # dim = 3
         leg_joint_torques = ObsTerm(func=leg_obs.get_joints_torques)  # dim = 12
         feet_contact = ObsTerm(
@@ -689,14 +689,14 @@ class RewardsCfg:
                  "std": math.sqrt(0.2)}
     )
 
-    track_base_height_exp_rough = RewTerm(
-        func=mdp.base_height_tracking, 
-        weight=0.5,
-         params={ 
-                 "desired_height": 0.3, 
-                 "std": 0.02,
-                 "use_height_command": True}
-    )
+    # track_base_height_exp_rough = RewTerm(
+    #     func=mdp.base_height_tracking, 
+    #     weight=0.5,
+    #      params={ 
+    #              "desired_height": 0.3, 
+    #              "std": 0.02,
+    #              "use_height_command": True}
+    # )
 
     # track_base_height_exp_floating_ring = RewTerm(
     #     func=mdp.base_height_tracking,
@@ -707,48 +707,48 @@ class RewardsCfg:
     #     },
     # )
 
-    track_base_height_exp_floating_ring = RewTerm(
-        func=mdp.base_height_tracking_in_floating_ring_region,
-        weight=0.0,
-        params={
-            "desired_height": 0.22,
-            "std": 0.02,
-            "use_height_command": True,
-            "floating_ring_terrain_type": 3,
-            "platform_width": 2.0,
-            "ring_width_range": (0.6, 1.8),
-            "margin": 0.4,
-        },
-    )
+    # track_base_height_exp_floating_ring = RewTerm(
+    #     func=mdp.base_height_tracking_in_floating_ring_region,
+    #     weight=0.0,
+    #     params={
+    #         "desired_height": 0.22,
+    #         "std": 0.02,
+    #         "use_height_command": True,
+    #         "floating_ring_terrain_type": 3,
+    #         "platform_width": 2.0,
+    #         "ring_width_range": (0.6, 1.8),
+    #         "margin": 0.4,
+    #     },
+    # )
 
-    track_base_height_exp_ascend = RewTerm(
-        func=mdp.base_height_tracking, 
-        weight=0.5,
-         params={ 
-                 "desired_height": 0.3, 
-                 "std": 0.02,
-                 "use_height_command": True}
-    )
-    track_base_height_exp_descend = RewTerm(
-        func=mdp.base_height_tracking,
-        weight=0.5,
-         params={
-                 "desired_height": 0.3,
-                 "std": 0.02,
-                 "use_height_command": True}
-    )
+    # track_base_height_exp_ascend = RewTerm(
+    #     func=mdp.base_height_tracking, 
+    #     weight=0.5,
+    #      params={ 
+    #              "desired_height": 0.3, 
+    #              "std": 0.02,
+    #              "use_height_command": True}
+    # )
+    # track_base_height_exp_descend = RewTerm(
+    #     func=mdp.base_height_tracking,
+    #     weight=0.5,
+    #      params={
+    #              "desired_height": 0.3,
+    #              "std": 0.02,
+    #              "use_height_command": True}
+    # )
 
     forward_progress_ascend = None
     base_height_progress_ascend = None
 
-    track_base_height_exp_flat = RewTerm(
-        func=mdp.base_height_tracking, 
-        weight=0.5,
-         params={ 
-                 "desired_height": 0.3, 
-                 "std": 0.02,
-                 "use_height_command": True}
-    )
+    # track_base_height_exp_flat = RewTerm(
+    #     func=mdp.base_height_tracking, 
+    #     weight=0.5,
+    #      params={ 
+    #              "desired_height": 0.3, 
+    #              "std": 0.02,
+    #              "use_height_command": True}
+    # )
 
 
     lin_vel_z_l2_rough = RewTerm(func=mdp.lin_vel_z_l2, weight=-2.5)

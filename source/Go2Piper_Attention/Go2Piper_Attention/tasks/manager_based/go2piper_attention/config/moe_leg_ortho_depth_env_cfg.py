@@ -38,7 +38,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         # self.scene.terrain.terrain_type = "plane"
         # self.scene.terrain.terrain_generator = None
 
-        self.multi_task_rewards.task_sampling_weights = [1.0, 1.0, 1.0, 0.0, 1.0]
+        self.multi_task_rewards.task_sampling_weights = [1.0, 1.0, 1.0, 1.0, 1.0]
 
         ##  velocity command
         self.commands.base_velocity.curriculum_coeff = 4000
@@ -59,7 +59,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.dof_torques_l2_common.weight = -1.0e-5 
         self.rewards.dof_acc_l2_common.weight =  -2.5e-7
         self.rewards.action_rate_l2_common.weight = -0.01
-        self.rewards.feet_air_time_common.weight = 0.4
+        self.rewards.feet_air_time_common.weight = 1.0
         self.rewards.feet_slide_common.weight = -0.1
         # self.rewards.F_feet_air_time_common.weight = 0.0 #0.5
         # self.rewards.R_feet_air_time_common.weight = 0.0 #0.5
@@ -67,7 +67,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         # self.rewards.feet_height_body_common.weight = -0.0 # 0.5 #TODO 
         self.rewards.foot_contact_common.weight = 0.005
         self.rewards.joint_mirror_common.weight =  -0.2
-        self.rewards.gait_reward_common.weight = 2.0 # 1.0
+        self.rewards.gait_reward_common.weight = 0.0 # 1.0
         self.rewards.feet_long_air_common.weight =  -0.3
         self.rewards.feet_long_contact_common.weight = -0.0
         self.rewards.hip_deviation_common.weight = -0.5
@@ -75,17 +75,17 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.F_joint_deviation_common.weight = -0.06 # 0.1
         self.rewards.R_joint_deviation_common.weight = -0.06 # 0.15
         self.rewards.action_smoothness_common.weight = -0.02 # -0.02
-        self.rewards.fr_feet_under_hips_common.weight = -1.0
-        self.rewards.fl_feet_under_hips_common.weight = -1.0
-        self.rewards.rr_feet_under_hips_common.weight = -1.0
-        self.rewards.rl_feet_under_hips_common.weight = -1.0
+        self.rewards.fr_feet_under_hips_common.weight = -0.2
+        self.rewards.fl_feet_under_hips_common.weight = -0.2
+        self.rewards.rr_feet_under_hips_common.weight = -0.2
+        self.rewards.rl_feet_under_hips_common.weight = -0.2
 
 
         # Rough reward weights:
         # Add RewTerm fields ending with "_rough" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_rough.weight = 4.0
         self.rewards.track_lin_vel_y_exp_rough.weight = 0.5
-        self.rewards.track_base_height_exp_rough.weight = 1.0
+        # self.rewards.track_base_height_exp_rough.weight = 1.0
         self.rewards.lin_vel_z_l2_rough.weight = -2.5
         self.rewards.thigh_contact_rough.weight = -1.0
         self.rewards.calf_contact_rough.weight = -1.0
@@ -98,7 +98,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         self.rewards.track_lin_vel_x_exp_floating_ring.weight = 4.0
         self.rewards.track_lin_vel_y_exp_floating_ring.weight = 0.5
         # self.rewards.track_base_height_exp_floating_ring.weight = 0.0
-        self.rewards.track_base_height_exp_floating_ring.weight = 2.0
+        # self.rewards.track_base_height_exp_floating_ring.weight = 2.0
         self.rewards.lin_vel_z_l2_floating_ring.weight = -1.0
         self.rewards.thigh_contact_floating_ring.weight = -1.0
         self.rewards.calf_contact_floating_ring.weight = -1.0
@@ -110,7 +110,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         # Add RewTerm fields ending with "_ascend" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_ascend.weight = 4.0
         self.rewards.track_lin_vel_y_exp_ascend.weight = 0.5
-        self.rewards.track_base_height_exp_ascend.weight = 1.0
+        # self.rewards.track_base_height_exp_ascend.weight = 1.0
         self.rewards.lin_vel_z_l2_ascend.weight = -0.25
         self.rewards.thigh_contact_ascend.weight = -0.5
         self.rewards.calf_contact_ascend.weight = -0.5
@@ -122,7 +122,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         # Add RewTerm fields ending with "_descend" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_descend.weight = 4.0
         self.rewards.track_lin_vel_y_exp_descend.weight = 0.5
-        self.rewards.track_base_height_exp_descend.weight = 1.0
+        # self.rewards.track_base_height_exp_descend.weight = 1.0
         self.rewards.lin_vel_z_l2_descend.weight = -0.25
         self.rewards.thigh_contact_descend.weight = -0.5
         self.rewards.calf_contact_descend.weight = -0.5
@@ -135,7 +135,7 @@ class Go2PiperMoEOrthoEnvCfg(LocomotionVelocityEnvCfg):
         # Add RewTerm fields ending with "_flat" in RewardsCfg, then configure them here.
         self.rewards.track_lin_vel_x_exp_flat.weight = 4.0
         self.rewards.track_lin_vel_y_exp_flat.weight = 0.5
-        self.rewards.track_base_height_exp_flat.weight = 1.0
+        # self.rewards.track_base_height_exp_flat.weight = 1.0
         self.rewards.lin_vel_z_l2_flat.weight = -2.5
         self.rewards.thigh_contact_flat.weight = -0.5
         self.rewards.calf_contact_flat.weight = -0.5

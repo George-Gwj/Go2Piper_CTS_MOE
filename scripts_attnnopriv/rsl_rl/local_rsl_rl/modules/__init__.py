@@ -6,6 +6,8 @@
 """Definitions for neural-network components for RL-agents."""
 
 from .actor_critic import ActorCritic
+from .amp_discriminator import AMPDiscriminator
+from .amp_motion_dataset import AMPMotionDataset
 from .hybrid_leg_arm_cts_moe import ArmCritic, ArmMLPActor, HybridLegArmCTSMoEPolicy
 from .normalizer import EmpiricalNormalization
 from .structure_aware_cts_moe import (

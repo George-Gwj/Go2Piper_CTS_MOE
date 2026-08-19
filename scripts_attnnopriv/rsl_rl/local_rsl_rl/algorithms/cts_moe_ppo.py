@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import torch
 import torch.nn.functional as F
 import torch.nn as nn
@@ -7,7 +9,7 @@ import torch.optim as optim
 
 from local_rsl_rl.storage import CTSMoERolloutStorage
 from local_rsl_rl.utils import PerTaskPopArt
-from local_rsl_rl.modules import compute_orthogonality_metrics
+from local_rsl_rl.modules import AMPDiscriminator, AMPMotionDataset, compute_orthogonality_metrics
 
 
 class CTSMoEPPO:
@@ -55,6 +57,22 @@ class CTSMoEPPO:
         popart_value_loss: str = "huber",
         popart_huber_delta: float = 1.0,
         value_loss_per_task_average: bool = True,
+        use_amp: bool = False,
+        amp_motion_files: str | Sequence[str] = "datasets/mocap_motions/*",
+        amp_reward_coef: float = 0.01,
+        amp_task_reward_lerp: float = 0.3,
+        amp_discr_hidden_dims: Sequence[int] = (1024, 512),
+        amp_replay_buffer_size: int = 1_000_000,
+        amp_num_preload_transitions: int = 2_000_000,
+        amp_num_learning_epochs: int = 5,
+        amp_num_mini_batches: int = 4,
+        amp_batch_size: int = 24_576,
+        amp_discriminator_lr: float = 1e-3,
+        amp_grad_penalty_lambda: float = 10.0,
+        amp_policy_target: float = -1.0,
+        amp_expert_target: float = 1.0,
+        amp_obs_dim: int = 30,
+        amp_discriminator_input_dim: int = 60,
     ):
         self.device = device
         self.policy = policy.to(device)
@@ -117,6 +135,33 @@ class CTSMoEPPO:
             if use_popart
             else None
         )
+        self.use_amp = use_amp
+        self.amp_reward_coef = amp_reward_coef
+        self.amp_task_reward_lerp = amp_task_reward_lerp
+        self.amp_num_learning_epochs = amp_num_learning_epochs
+        self.amp_num_mini_batches = amp_num_mini_batches
+        self.amp_batch_size = amp_batch_size
+        self.amp_grad_penalty_lambda = amp_grad_penalty_lambda
+        self.amp_policy_target = amp_policy_target
+        self.amp_expert_target = amp_expert_target
+        self.amp_obs_dim = amp_obs_dim
+        if amp_discriminator_input_dim != 2 * amp_obs_dim:
+            raise ValueError("amp_discriminator_input_dim must equal 2 * amp_obs_dim")
+        self.amp_discriminator = None
+        self.amp_dataset = None
+        self.amp_optimizer = None
+        if self.use_amp:
+            self.amp_discriminator = AMPDiscriminator(
+                input_dim=amp_discriminator_input_dim,
+                hidden_dims=amp_discr_hidden_dims,
+            ).to(device)
+            self.amp_dataset = AMPMotionDataset(
+                amp_motion_files,
+                device=device,
+                replay_buffer_size=amp_replay_buffer_size,
+                num_preload_transitions=amp_num_preload_transitions,
+            )
+            self.amp_optimizer = optim.Adam(self.amp_discriminator.parameters(), lr=amp_discriminator_lr, eps=eps)
 
     def init_storage(
         self,
@@ -130,16 +175,17 @@ class CTSMoEPPO:
         actions_shape,
     ):
         self.storage = CTSMoERolloutStorage(
-            num_envs,
-            num_transitions_per_env,
-            proprio_shape,
-            height_scan_shape,
-            privileged_obs_shape,
-            proprio_history_shape,
-            perception_shape,
-            actions_shape,
-            self.policy.moe_actor.num_experts,
-            self.device,
+            num_envs=num_envs,
+            num_transitions_per_env=num_transitions_per_env,
+            proprio_shape=proprio_shape,
+            height_scan_shape=height_scan_shape,
+            privileged_obs_shape=privileged_obs_shape,
+            proprio_history_shape=proprio_history_shape,
+            perception_shape=perception_shape,
+            actions_shape=actions_shape,
+            num_experts=self.policy.moe_actor.num_experts,
+            amp_obs_shape=[self.amp_obs_dim] if self.use_amp else [0],
+            device=self.device,
         )
 
     def act(
@@ -150,6 +196,7 @@ class CTSMoEPPO:
         proprio_history: torch.Tensor,
         perception: torch.Tensor,
         task_id: torch.Tensor,
+        amp_obs: torch.Tensor | None = None,
         student_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         student_mask = self._resolve_student_mask(proprio.shape[0], proprio.device, student_mask)
@@ -176,6 +223,7 @@ class CTSMoEPPO:
         self.transition.proprio_history = proprio_history
         self.transition.perception = perception
         self.transition.task_id = task_id
+        self.transition.amp_obs = amp_obs
         self.transition.student_mask = student_mask
         self.transition.actions = actions.detach()
         self.transition.values = value_raw.detach()
@@ -185,15 +233,24 @@ class CTSMoEPPO:
         self.transition.router_weights = out["router_weights"].detach()
         return actions.detach()
 
-    def process_env_step(self, rewards: torch.Tensor, dones: torch.Tensor, infos: dict):
-        self.transition.rewards = rewards.clone()
+    def process_env_step(
+        self,
+        rewards: torch.Tensor,
+        dones: torch.Tensor,
+        infos: dict,
+        next_amp_obs: torch.Tensor | None = None,
+    ):
+        task_rewards = rewards.clone()
+        amp_rewards = self._compute_amp_rewards(self.transition.amp_obs, next_amp_obs, rewards)
+        self.transition.task_rewards = task_rewards
+        self.transition.amp_rewards = amp_rewards
+        self.transition.next_amp_obs = next_amp_obs
+        self.transition.rewards = task_rewards.view_as(amp_rewards) + amp_rewards
         self.transition.dones = dones
 
         if "time_outs" in infos:
-            self.transition.rewards += self.gamma * torch.squeeze(
-                self.transition.values * infos["time_outs"].unsqueeze(1).to(self.device),
-                1,
-            )
+            time_outs = infos["time_outs"].to(self.device).view(-1, 1)
+            self.transition.rewards += self.gamma * self.transition.values * time_outs
 
         self.storage.add_transitions(self.transition)
         self.transition.clear()
@@ -206,6 +263,7 @@ class CTSMoEPPO:
         proprio_history: torch.Tensor,
         perception: torch.Tensor,
         task_id: torch.Tensor,
+        amp_obs: torch.Tensor | None = None,
         student_mask: torch.Tensor | None = None,
     ):
         student_mask = self._resolve_student_mask(proprio.shape[0], proprio.device, student_mask)
@@ -460,9 +518,126 @@ class CTSMoEPPO:
             for task in range(self.popart.num_tasks):
                 loss_dict[f"popart_mean_task_{task}"] = stats["mean"][task].item()
                 loss_dict[f"popart_std_task_{task}"] = stats["std"][task].item()
+        if self.use_amp:
+            loss_dict.update(
+                {
+                    "AMP/reward_mean": self.storage.amp_rewards.mean().item(),
+                    "AMP/task_reward_mean": self.storage.task_rewards.mean().item(),
+                    "AMP/total_reward_mean": self.storage.rewards.mean().item(),
+                }
+            )
+            loss_dict.update(self._update_amp_discriminator())
 
         self.storage.clear()
         return loss_dict
+
+    def _compute_amp_rewards(
+        self,
+        amp_obs: torch.Tensor | None,
+        next_amp_obs: torch.Tensor | None,
+        rewards: torch.Tensor,
+    ) -> torch.Tensor:
+        reward_shape = rewards.view(-1, 1).shape
+        if not self.use_amp:
+            return torch.zeros(reward_shape, device=self.device, dtype=rewards.dtype)
+        if amp_obs is None or next_amp_obs is None:
+            raise ValueError("AMP is enabled, but amp_obs or next_amp_obs is missing")
+        with torch.no_grad():
+            amp_obs = self._finite(amp_obs)
+            next_amp_obs = self._finite(next_amp_obs)
+            discriminator_output = self.amp_discriminator(amp_obs, next_amp_obs)
+            amp_rewards = torch.clamp(
+                1.0 - 0.25 * torch.square(discriminator_output - self.amp_expert_target),
+                min=0.0,
+            )
+            return (self.amp_reward_coef * amp_rewards).view(-1, 1)
+
+    def _update_amp_discriminator(self) -> dict[str, float]:
+        if not self.use_amp:
+            return {}
+        policy_amp_obs = self.storage.amp_obs.flatten(0, 1).detach()
+        policy_amp_next_obs = self.storage.next_amp_obs.flatten(0, 1).detach()
+        rollout_size = policy_amp_obs.shape[0]
+        mini_batch_size = self.amp_batch_size
+        if mini_batch_size <= 0:
+            mini_batch_size = max(1, rollout_size // max(self.amp_num_mini_batches, 1))
+        mini_batch_size = min(mini_batch_size, rollout_size)
+
+        mean_amp_loss = 0.0
+        mean_expert_loss = 0.0
+        mean_policy_loss = 0.0
+        mean_grad_penalty = 0.0
+        mean_expert_d = 0.0
+        mean_policy_d = 0.0
+        mean_expert_acc = 0.0
+        mean_policy_acc = 0.0
+        num_updates = 0
+
+        for _ in range(self.amp_num_learning_epochs):
+            indices = torch.randperm(rollout_size, device=self.device)
+            for mini_batch_idx in range(self.amp_num_mini_batches):
+                start = mini_batch_idx * mini_batch_size
+                end = min(start + mini_batch_size, rollout_size)
+                if start >= rollout_size:
+                    batch_idx = torch.randint(rollout_size, (mini_batch_size,), device=self.device)
+                else:
+                    batch_idx = indices[start:end]
+                if batch_idx.numel() == 0:
+                    continue
+
+                policy_obs = self._finite(policy_amp_obs[batch_idx])
+                policy_next_obs = self._finite(policy_amp_next_obs[batch_idx])
+                expert_obs, expert_next_obs = self.amp_dataset.sample(batch_idx.numel())
+                expert_obs = self._finite(expert_obs)
+                expert_next_obs = self._finite(expert_next_obs)
+
+                expert_d = self.amp_discriminator(expert_obs, expert_next_obs)
+                policy_d = self.amp_discriminator(policy_obs, policy_next_obs)
+                expert_target = torch.full_like(expert_d, self.amp_expert_target)
+                policy_target = torch.full_like(policy_d, self.amp_policy_target)
+                expert_loss = F.mse_loss(expert_d, expert_target)
+                policy_loss = F.mse_loss(policy_d, policy_target)
+                grad_penalty = self._amp_grad_penalty(expert_obs, expert_next_obs)
+                amp_loss = 0.5 * (expert_loss + policy_loss) + self.amp_grad_penalty_lambda * grad_penalty
+
+                self.amp_optimizer.zero_grad()
+                amp_loss.backward()
+                nn.utils.clip_grad_norm_(self.amp_discriminator.parameters(), self.max_grad_norm)
+                self.amp_optimizer.step()
+
+                mean_amp_loss += amp_loss.item()
+                mean_expert_loss += expert_loss.item()
+                mean_policy_loss += policy_loss.item()
+                mean_grad_penalty += grad_penalty.item()
+                mean_expert_d += expert_d.detach().mean().item()
+                mean_policy_d += policy_d.detach().mean().item()
+                mean_expert_acc += (expert_d.detach() > 0.0).float().mean().item()
+                mean_policy_acc += (policy_d.detach() < 0.0).float().mean().item()
+                num_updates += 1
+
+        denom = max(num_updates, 1)
+        return {
+            "AMP/discriminator": mean_amp_loss / denom,
+            "AMP/expert_loss": mean_expert_loss / denom,
+            "AMP/policy_loss": mean_policy_loss / denom,
+            "AMP/grad_penalty": mean_grad_penalty / denom,
+            "AMP/expert_d_mean": mean_expert_d / denom,
+            "AMP/policy_d_mean": mean_policy_d / denom,
+            "AMP/expert_acc": mean_expert_acc / denom,
+            "AMP/policy_acc": mean_policy_acc / denom,
+        }
+
+    def _amp_grad_penalty(self, expert_obs: torch.Tensor, expert_next_obs: torch.Tensor) -> torch.Tensor:
+        expert_input = torch.cat([expert_obs, expert_next_obs], dim=-1).detach().requires_grad_(True)
+        expert_d = self.amp_discriminator.net(expert_input).squeeze(-1)
+        gradients = torch.autograd.grad(
+            expert_d.sum(),
+            expert_input,
+            create_graph=True,
+            retain_graph=True,
+            only_inputs=True,
+        )[0]
+        return gradients.pow(2).sum(dim=-1).mean()
 
     def _ppo_update_parameters(self, training_mode: str | None = None) -> list[torch.nn.Parameter]:
         training_mode = self.training_mode if training_mode is None else training_mode

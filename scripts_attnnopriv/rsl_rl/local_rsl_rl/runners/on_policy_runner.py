@@ -137,16 +137,17 @@ class OnPolicyRunner:
             start = time.time()
             with torch.inference_mode():
                 for _ in range(self.num_steps_per_env):
-                    actions = self.alg.act(**obs)
+                    actions = self.alg.act(**self._algorithm_obs(obs))
                     next_obs, rewards, dones, infos = self.env.step_cts_moe(actions.to(self.env.device))
-                    obs = self._move_obs_to_device(next_obs)
+                    next_obs = self._move_obs_to_device(next_obs)
                     rewards = rewards.to(self.device)
                     dones = dones.to(self.device)
                     if self.is_hybrid:
                         leg_rewards, arm_rewards = self._extract_hybrid_rewards(rewards, infos)
                         self.alg.process_env_step(leg_rewards, arm_rewards, dones, infos)
                     else:
-                        self.alg.process_env_step(rewards, dones, infos)
+                        self.alg.process_env_step(rewards, dones, infos, next_amp_obs=next_obs.get("amp_obs"))
+                    obs = next_obs
 
                     if self.log_dir is not None:
                         if "episode" in infos:
@@ -163,7 +164,7 @@ class OnPolicyRunner:
 
                 collection_time = time.time() - start
                 learn_start = time.time()
-                self.alg.compute_returns(**obs)
+                self.alg.compute_returns(**self._algorithm_obs(obs))
 
             loss_dict = self.alg.update()
             learn_time = time.time() - learn_start
@@ -251,6 +252,11 @@ class OnPolicyRunner:
             moved_obs[key] = value
         return moved_obs
 
+    def _algorithm_obs(self, obs: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        if not self.is_hybrid:
+            return obs
+        return {key: value for key, value in obs.items() if key != "amp_obs"}
+
     def _init_writer(self):
         if self.log_dir is None or self.writer is not None or self.disable_logs:
             return
@@ -293,7 +299,7 @@ class OnPolicyRunner:
         fps = int(collection_size / max(iteration_time, 1e-6))
 
         for key, value in loss_dict.items():
-            if key.startswith("Router/") or key.startswith("actor/"):
+            if key.startswith("Router/") or key.startswith("actor/") or key.startswith("AMP/"):
                 self.writer.add_scalar(key, value, it)
             else:
                 self.writer.add_scalar(f"Loss/{key}", value, it)
@@ -486,6 +492,10 @@ class OnPolicyRunner:
             saved_dict["optimizer_state_dict"] = self.alg.optimizer.state_dict()
             if self.alg.student_optimizer is not None:
                 saved_dict["student_optimizer_state_dict"] = self.alg.student_optimizer.state_dict()
+            if getattr(self.alg, "amp_discriminator", None) is not None:
+                saved_dict["amp_discriminator_state_dict"] = self.alg.amp_discriminator.state_dict()
+            if getattr(self.alg, "amp_optimizer", None) is not None:
+                saved_dict["amp_optimizer_state_dict"] = self.alg.amp_optimizer.state_dict()
         if getattr(self.alg, "popart", None) is not None:
             saved_dict["popart_state_dict"] = self.alg.popart.state_dict()
         torch.save(saved_dict, path)
@@ -507,6 +517,10 @@ class OnPolicyRunner:
                 self.alg.optimizer.load_state_dict(loaded_dict["optimizer_state_dict"])
                 if self.alg.student_optimizer is not None and "student_optimizer_state_dict" in loaded_dict:
                     self.alg.student_optimizer.load_state_dict(loaded_dict["student_optimizer_state_dict"])
+                if getattr(self.alg, "amp_discriminator", None) is not None and "amp_discriminator_state_dict" in loaded_dict:
+                    self.alg.amp_discriminator.load_state_dict(loaded_dict["amp_discriminator_state_dict"])
+                if getattr(self.alg, "amp_optimizer", None) is not None and "amp_optimizer_state_dict" in loaded_dict:
+                    self.alg.amp_optimizer.load_state_dict(loaded_dict["amp_optimizer_state_dict"])
         if getattr(self.alg, "popart", None) is not None and "popart_state_dict" in loaded_dict:
             self.alg.popart.load_state_dict(loaded_dict["popart_state_dict"])
         self.current_learning_iteration = loaded_dict.get("iter", 0)

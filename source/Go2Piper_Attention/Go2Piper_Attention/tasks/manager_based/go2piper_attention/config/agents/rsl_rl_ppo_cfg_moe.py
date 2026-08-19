@@ -110,6 +110,24 @@ class Go2PiperCTSMoEAlgorithmCfg(RslRlPpoAlgorithmCfg):
     popart_huber_delta: float = 1.0
     value_loss_per_task_average: bool = True
 
+    # Adversarial Motion Priors.
+    use_amp: bool = True
+    amp_motion_files: str = "datasets/mocap_motions/*"
+    amp_reward_coef: float = 0.01
+    amp_task_reward_lerp: float = 0.3
+    amp_discr_hidden_dims: list[int] = [1024, 512]
+    amp_replay_buffer_size: int = 1_000_000
+    amp_num_preload_transitions: int = 2_000_000
+    amp_num_learning_epochs: int = 5
+    amp_num_mini_batches: int = 4
+    amp_batch_size: int = 24_576
+    amp_discriminator_lr: float = 1.0e-3
+    amp_grad_penalty_lambda: float = 10.0
+    amp_policy_target: float = -1.0
+    amp_expert_target: float = 1.0
+    amp_obs_dim: int = 30
+    amp_discriminator_input_dim: int = 60
+
 
 @configclass
 class Go2PiperCTSMoERunnerCfg(RslRlOnPolicyRunnerCfg):

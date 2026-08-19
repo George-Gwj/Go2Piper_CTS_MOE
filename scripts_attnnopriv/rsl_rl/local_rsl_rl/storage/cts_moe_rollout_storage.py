@@ -19,9 +19,13 @@ class CTSMoERolloutStorage:
             self.proprio_history = None
             self.perception = None
             self.task_id = None
+            self.amp_obs = None
+            self.next_amp_obs = None
             self.student_mask = None
             self.actions = None
             self.rewards = None
+            self.task_rewards = None
+            self.amp_rewards = None
             self.dones = None
             self.values = None
             self.actions_log_prob = None
@@ -49,6 +53,7 @@ class CTSMoERolloutStorage:
         perception_shape: tuple[int, ...] | list[int],
         actions_shape: tuple[int, ...] | list[int],
         num_experts: int,
+        amp_obs_shape: tuple[int, ...] | list[int] | None = None,
         device: str = "cpu",
     ):
         self.device = device
@@ -63,9 +68,14 @@ class CTSMoERolloutStorage:
         self.perception = torch.zeros(num_transitions_per_env, num_envs, *perception_shape, device=device)
         self.task_ids = torch.zeros(num_transitions_per_env, num_envs, dtype=torch.long, device=device)
         self.student_masks = torch.zeros(num_transitions_per_env, num_envs, dtype=torch.bool, device=device)
+        amp_obs_shape = [0] if amp_obs_shape is None else amp_obs_shape
+        self.amp_obs = torch.zeros(num_transitions_per_env, num_envs, *amp_obs_shape, device=device)
+        self.next_amp_obs = torch.zeros(num_transitions_per_env, num_envs, *amp_obs_shape, device=device)
 
         self.actions = torch.zeros(num_transitions_per_env, num_envs, *actions_shape, device=device)
         self.rewards = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
+        self.task_rewards = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
+        self.amp_rewards = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
         self.dones = torch.zeros(num_transitions_per_env, num_envs, 1, dtype=torch.bool, device=device)
         self.values = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
         self.returns = torch.zeros(num_transitions_per_env, num_envs, 1, device=device)
@@ -86,9 +96,14 @@ class CTSMoERolloutStorage:
         self.perception[self.step].copy_(self._finite(transition.perception))
         self.task_ids[self.step].copy_(transition.task_id.long().view(-1))
         self.student_masks[self.step].copy_(transition.student_mask.bool().view(-1))
+        if self.amp_obs.shape[-1] > 0:
+            self.amp_obs[self.step].copy_(self._finite(transition.amp_obs))
+            self.next_amp_obs[self.step].copy_(self._finite(transition.next_amp_obs))
 
         self.actions[self.step].copy_(self._finite(transition.actions))
         self.rewards[self.step].copy_(self._finite(transition.rewards).view(-1, 1))
+        self.task_rewards[self.step].copy_(self._finite(transition.task_rewards).view(-1, 1))
+        self.amp_rewards[self.step].copy_(self._finite(transition.amp_rewards).view(-1, 1))
         self.dones[self.step].copy_(transition.dones.view(-1, 1).bool())
         self.values[self.step].copy_(self._finite(transition.values))
         self.actions_log_prob[self.step].copy_(self._finite(transition.actions_log_prob).view(-1, 1))

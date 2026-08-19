@@ -86,6 +86,8 @@ class Go2PiperLegCTSMoEDepthTeacherRunnerCfg(Go2PiperCTSMoERunnerCfg):
     """Depth-environment PPO training with proprio-only latent routing."""
 
     experiment_name = "go2piper_leg_cts_moe_ortho_depth_teacher"
+    logger = "wandb"
+    wandb_project = "go2piper_cts_moe"
     load_checkpoint: str = "LegCTSMoEOrthoDepthTeacher_.*.pt"
 
     policy = Go2PiperLegCTSMoEPolicyCfg(
